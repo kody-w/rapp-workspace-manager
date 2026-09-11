@@ -1,0 +1,7 @@
+{
+  "kind": "tool",
+  "name": "RAPP Workspace Manager",
+  "rappid": "rappid:@kody-w/rapp-workspace-manager:98439b87ffb132681bf9bbaa50c65f01bb29373a38ffd17c310119a05d9f5ee5",
+  "schema": "rapp/1",
+  "visibility": "public"
+}

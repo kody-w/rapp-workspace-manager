@@ -1,0 +1,7 @@
+{
+  "schema": "rapp/1",
+  "rappid": "rappid:@rapp-projects/public-release:37ec0e750bc024f574903557b6ef1c6bdd3fb48eee7f3afb1bfd8689ea564ed4",
+  "kind": "project",
+  "name": "RAPP Workspace Manager",
+  "frames": "frames/"
+}

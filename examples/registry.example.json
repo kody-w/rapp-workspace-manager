@@ -1,0 +1,20 @@
+{
+  "generated_utc": "2026-01-01T00:00:00.000Z",
+  "manager_rappid": "rappid:@example/local-workspaces:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "scan_roots": [
+    "/home/example/src"
+  ],
+  "schema": "rapp-workspace-manager/1",
+  "workspaces": [
+    {
+      "kind": "git",
+      "mode": null,
+      "name": "example-project",
+      "path": "/home/example/src/example-project",
+      "rappid": null,
+      "tags": [],
+      "world_id": null
+    }
+  ],
+  "world_id": "local-workspace-routing"
+}
