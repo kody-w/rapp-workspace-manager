@@ -357,6 +357,27 @@ def child_directories(path, budget):
 NATIVE_COMPONENTS = {".copilot", ".claude", ".hermes", ".scout", ".grokbot", ".grok"}
 
 
+def resolve_protected_boundary(value):
+    root = value["path"] if isinstance(value, dict) else value
+    saved = value.get("identity") if isinstance(value, dict) else None
+    historical = value.get("historical", False) if isinstance(value, dict) else False
+    if type(historical) is not bool:
+        raise RoutingError("invalid-protection-boundary")
+    if saved is not None:
+        validate_filesystem_identity(saved)
+    try:
+        current = directory_info(root, missing_ok=True)
+    except RoutingError:
+        if not historical:
+            raise
+        current = None
+    # Historical names are evidence about an object, not protection claims over
+    # whatever now occupies that spelling. The saved object ID remains protected.
+    if historical and (saved is None or current is None or current["identity"] != saved):
+        current = None
+    return saved, current
+
+
 def protected_local(path, profile_roots=(), *, candidate_info=None):
     path = absolute_path(path)
     lowered = [part.casefold() for part in path.parts]
@@ -374,13 +395,12 @@ def protected_local(path, profile_roots=(), *, candidate_info=None):
     if candidate["identity"] is not None and candidate["identity"] in home["ancestors"]:
         return True
     for value in profile_roots:
-        root = value["path"] if isinstance(value, dict) else value
-        saved_identity = value.get("identity") if isinstance(value, dict) else None
+        saved_identity, protected = resolve_protected_boundary(value)
         if saved_identity is not None:
-            validate_filesystem_identity(saved_identity)
             if saved_identity in candidate["ancestors"]:
                 return True
-        protected = directory_info(root, missing_ok=True)
+        if protected is None:
+            continue
         if (
             protected["identity"] is not None and protected["identity"] in candidate["ancestors"]
             or candidate["identity"] is not None and candidate["identity"] in protected["ancestors"]

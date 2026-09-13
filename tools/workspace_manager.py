@@ -19,7 +19,7 @@ from routing_io import (
     Budget, Limits, RoutingError, absolute_path, atomic_json, atomic_text,
     directory_fd, directory_identity, directory_info, directories_overlap,
     ensure_output, manager_lock, native_path, protected_local, read_bytes, read_json,
-    reject_constant, safe_stat, same_directory, same_location, unique_object,
+    reject_constant, resolve_protected_boundary, safe_stat, same_directory, same_location, unique_object,
     validate_filesystem_identity, verified_directory, verified_directory_info,
 )
 
@@ -91,12 +91,10 @@ def discover_git_workspaces(root, budget=None, exclude=()):
     budget = budget or Budget()
     excluded = set()
     for value in exclude:
-        path = value["path"] if isinstance(value, dict) else value
-        saved = value.get("identity") if isinstance(value, dict) else None
+        saved, info = resolve_protected_boundary(value)
         if saved is not None:
-            excluded.add(tuple(validate_filesystem_identity(saved)))
-        info = directory_info(path, missing_ok=True)
-        if info["identity"] is not None:
+            excluded.add(tuple(saved))
+        if info is not None and info["identity"] is not None:
             excluded.add(tuple(info["identity"]))
     visited = set()
     found, queue = [], [(root, 0)]
@@ -540,7 +538,7 @@ def all_profile_boundaries(registry):
         for boundary in (
             [{"path": root, "identity": state["profileIdentities"].get(root)}
              for root in state["profileRoots"] + state["requestedRoots"]]
-            + state["profileHistory"]
+            + [{**value, "historical": True} for value in state["profileHistory"]]
         )
     ]
 
@@ -573,27 +571,53 @@ def remap_native_identities(state, result):
     history = [unique[key] for key in sorted(unique)]
     if len(history) > 64:
         raise RoutingError("profile-history-bound")
-    aliases = {}
+    recorded_identities = {}
+    for value in history:
+        if value["identity"] is not None:
+            recorded_identities.setdefault(str(absolute_path(value["path"])), set()).add(tuple(value["identity"]))
+    aliases, ambiguous_legacy = {}, {}
     for root in result["profileRoots"]:
-        equivalents = []
+        current_identity = result["profileIdentities"][root]
+        at_location = {}
         for value in history:
-            equivalent = value["identity"] == result["profileIdentities"][root]
-            if not equivalent:
+            if value["path"] not in at_location:
                 try:
-                    equivalent = same_location(value["path"], root)
+                    at_location[value["path"]] = same_location(value["path"], root)
                 except RoutingError:
-                    equivalent = False
-            if equivalent:
-                equivalents.append(value)
-        aliases[root] = equivalents
+                    at_location[value["path"]] = False
+        conflicting_location = any(
+            value["identity"] is not None and value["identity"] != current_identity
+            and at_location[value["path"]] for value in history
+        )
+        equivalents, uncertain = set(), set()
+        for value in history:
+            same_object = value["identity"] == current_identity
+            legacy_location = value["identity"] is None and at_location[value["path"]]
+            conflict = (
+                len(recorded_identities.get(str(absolute_path(value["path"])), set())) > 1
+                or conflicting_location and at_location[value["path"]]
+            )
+            if conflict and (same_object or at_location[value["path"]]):
+                uncertain.add(value["path"])
+            elif same_object or legacy_location:
+                equivalents.add(value["path"])
+        aliases[root], ambiguous_legacy[root] = equivalents, uncertain
     selected, forgotten = set(state["selected"]), set(state["forgotten"])
     for item in result["catalog"] + result["observations"]:
         kind, identity, key = native_address(item)
+        # A v2 alias already has this exact filesystem-bound key. Never add a
+        # different saved inode's key merely because its old spelling matches.
         keys = {key}
-        for value in aliases[item["profileRoot"]]:
-            keys.add(native_ai.legacy_pointer_id(result["provider"], value["path"], kind, identity))
-            if value["identity"] is not None:
-                keys.add(native_ai.routing_id(result["provider"], value["identity"], kind, identity))
+        keys.update(
+            native_ai.legacy_pointer_id(result["provider"], path, kind, identity)
+            for path in aliases[item["profileRoot"]]
+        )
+        ambiguous = {
+            native_ai.legacy_pointer_id(result["provider"], path, kind, identity)
+            for path in ambiguous_legacy[item["profileRoot"]]
+        }
+        if ambiguous & forgotten:
+            raise RoutingError("native-identity-ambiguous")
         if forgotten & keys:
             forgotten.difference_update(keys)
             forgotten.add(key)
@@ -801,10 +825,11 @@ def scan_manager(args):
         profile_ids = []
         for boundary in boundaries:
             budget.check()
-            profile_ids.extend(
-                value for value in (boundary["identity"], directory_info(boundary["path"], missing_ok=True)["identity"])
-                if value is not None
-            )
+            saved, current = resolve_protected_boundary(boundary)
+            if saved is not None:
+                profile_ids.append(saved)
+            if current is not None and current["identity"] is not None:
+                profile_ids.append(current["identity"])
         for root in map(Path, roots):
             budget.check()
             info = directory_info(root)

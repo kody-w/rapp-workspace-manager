@@ -248,6 +248,15 @@ scalars remain opaque; their continuation text never becomes metadata.
 
 Provider namespace history (bounded to 64 entries per provider) preserves
 suppression and selection while v1 keys upgrade and profile aliases change.
+Different saved device/inode identities are never aliases, even at the same
+spelling: their original suppressions remain intact and selection requires
+explicit re-add. Ambiguous v1 suppression stays stale with
+`native-identity-ambiguous` rather than being guessed or discarded.
+Cached Copilot metadata is rebound to the current verified locator without
+changing its stable pointer identity. Historical protection follows remembered
+objects through verified current locators; inaccessible, symlinked or reused
+obsolete names cannot hide unrelated healthy routes.
+
 Old local identifier-only tombstones lack recoverable filesystem provenance:
 new local scans fail closed with `legacy-suppression-readd-required` until
 explicit re-add using the original recorded path spelling. Unrecoverable or

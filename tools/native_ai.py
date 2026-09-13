@@ -358,19 +358,27 @@ def _copilot_item(root, session_id, previous, budget, profile_identity=None):
     source_stamp = stamp(info) if info else None
     if info is not None and info.st_size > budget.limits.max_file_bytes:
         raise RoutingError("file-size-bound")
-    if (
-        previous and previous["pointer_version"] == 2
-        and source_stamp is not None and previous["sourceStamp"] == source_stamp
-    ):
-        return previous, True
     if info is not None and not stat.S_ISREG(info.st_mode):
         raise RoutingError("not-regular-metadata")
+    verified_identity = directory_identity(root) if profile_identity is None else profile_identity
+    if (
+        previous and previous["pointer_version"] == 2
+        and previous["profileIdentity"] == verified_identity
+        and previous["nativeSessionId"] == session_id
+        and source_stamp is not None and previous["sourceStamp"] == source_stamp
+    ):
+        return pointer(
+            "copilot", root, "copilot-session", session_id,
+            profile_identity=verified_identity,
+            nativeSessionId=session_id, metadata=dict(previous["metadata"]),
+            sourceStamp=source_stamp, availability="metadata",
+        ), True
     metadata = _yaml_metadata(read_bytes(path, budget)) if info else {}
     if info is not None and stamp(safe_stat(path)) != source_stamp:
         raise RoutingError("metadata-changed")
     return pointer(
         "copilot", root, "copilot-session", session_id,
-        profile_identity=profile_identity,
+        profile_identity=verified_identity,
         nativeSessionId=session_id, metadata=metadata, sourceStamp=source_stamp,
         availability="metadata" if info else "missing-metadata",
     ), False
@@ -758,7 +766,7 @@ def scan_provider(provider, profile_roots, *, previous=(), pending=None, limits=
     size = 0
     for item in candidates:
         budget.check()
-        if item["profileIdentity"] != profile_identities[item["profileRoot"]]:
+        if item["profileIdentity"] != profile_identities.get(item["profileRoot"]):
             raise RoutingError("metadata-changed")
         size += len(json.dumps(item, separators=(",", ":")).encode("utf-8"))
         if size > MAX_CATALOG_BYTES:

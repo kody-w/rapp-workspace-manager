@@ -140,6 +140,10 @@ inventory directory stat fingerprints, native UUID names, offset and staged
 allowlisted pointers. Incomplete staged candidates are never active routes.
 Revalidate membership stamps on resume/completion. Reuse a prior metadata
 version 2 pointer only when its no-follow file stat fingerprint is unchanged.
+On a cache hit, return a new pointer bound to the current verified profile
+locator and unchanged profile/session identity. Do not retain an obsolete
+`profileRoot`, mutate the prior catalog, or leak a missing namespace `KeyError`;
+namespace inconsistency is a stale metadata error.
 Version 1 checkpoints restart and version 1 caches are reparsed, never promoted
 unchanged. Missing
 workspace metadata yields an unresolved identity, never a guessed repository.
@@ -256,6 +260,12 @@ Native namespace history allows a complete successful scan to translate v1
 keys and known profile aliases while preserving suppression. Native session,
 bucket, table and workspace identities must still match exactly; no new native
 identity is inferred. Incomplete/error scans never apply a partial key migration.
+Conflicting saved device/inode identities MUST NOT be treated as aliases by
+pathname equivalence. Their original tombstones and selections remain bound
+to the original objects; replacement objects do not inherit acceptance.
+Ambiguous legacy path-hash suppression fails closed with
+`native-identity-ambiguous` until explicit re-add/identity selection. It MUST
+NOT be transferred to another inode or consumed while guessing a migration.
 
 Clear/forget discard in-progress provider staging, preserve other partitions,
 and regenerate all tracked manager views. No source identity or history is
@@ -285,6 +295,14 @@ case-folding or symlink-following realpath MUST NOT decide object identity or
 authorization. Filesystem lookups determine each volume's case behavior.
 Local routes must still match their stored filesystem identity when projected
 or opened; replacement at the same path requires explicit re-add.
+
+Current protection locators are checked with no-follow I/O. A historical
+locator contributes resolved ancestry only if it still matches its saved
+identity; its remembered object identity remains protected independently.
+Missing, inaccessible, symlinked or reused obsolete historical locators are
+isolated, not followed or allowed to invalidate unrelated healthy routes.
+Verified current locators retain native-object and ancestor protection during
+editor generation, opening, exact selection and recursive discovery.
 
 Editor output filenames MUST be direct children of the private manager and
 end in `.code-workspace`. Preserve unrelated JSON/JSONC settings, extensions
