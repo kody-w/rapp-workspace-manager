@@ -33,24 +33,29 @@ Additive routing fields:
 
 - `providers`: partitions keyed by `copilot`, `claude`, `hermes`, `scout`,
   `grokbot`, and no other provider.
-- `forgotten`: local pointer identifier tombstones.
+- `forgotten`: local suppression tombstones containing only
+  `pointer_id,path,filesystemIdentity`; legacy identifier-only strings remain
+  readable but cannot silently lose suppression during an upgrade.
 - `editor_view`: primary manager-owned `.code-workspace` filename.
 - `editor_views`: bounded list of generated filenames, all regenerated on
   pointer changes so obsolete views do not retain forgotten routes.
 
-Legacy local registries load without reminting identity. Missing extension
-fields and local pointer discriminators are upgraded in memory; the next
-explicit mutation persists the extension. Unknown fields, types, versions,
+Legacy local registries load without reminting RAPP identity. Missing extension
+fields receive defaults in memory; legacy pointer version 1 remains identified
+as legacy until an explicit operation verifies its filesystem binding.
+Unknown fields, types, versions,
 providers, cross-partition identities and world/manager mismatches fail closed.
 
-Every local pointer has `pointer_version: 1`, `pointer_type: local-directory`,
+New local pointers have `pointer_version: 2`, `pointer_type: local-directory`,
 a deterministic `pointer_id`, `selection: exact|discovered`, and only:
-`name,path,kind,rappid,mode,world_id,tags`. `path` is absolute, `kind` is
+`name,path,kind,rappid,mode,world_id,tags,filesystemIdentity`. The filesystem
+identity is a validated `[device, inode]` pair. `path` is absolute, `kind` is
 `directory|git|rapp-workspace`. RAPP labels require canonical validation of a
 bounded root `rappid.json`; symlinked or invalid identities are ignored.
 
-Every native pointer has `pointer_version: 1`, `pointer_type`, `pointer_id`,
-`provider`, and `profileRoot`, followed by exactly one provider-specific shape:
+New native pointers have `pointer_version: 2`, `pointer_type`, `pointer_id`,
+`provider`, `profileRoot`, and `profileIdentity: [device, inode]`, followed by
+exactly one provider-specific shape:
 
 | Discriminator | Provider-specific fields |
 |---|---|
@@ -60,18 +65,27 @@ Every native pointer has `pointer_version: 1`, `pointer_type`, `pointer_id`,
 | `scout-workspace` | `nativeVersion: 3`, `workspaceId`, `providerId`, `rootId` |
 
 There is deliberately **no Grokbot workspace pointer discriminator**.
-Grokbot observations contain only `provider,profileRoot,state,mapping,observation_id`, with
+Grokbot observations contain only
+`provider,profileRoot,profileIdentity,observation_version,state,mapping,observation_id`, with
+`observation_version: 2`,
 `state: app-detected`, `mapping: workspace-mapping-unavailable`.
 The observation key is manager-owned, derived from the profile root, and
 supports suppression; it is not an invented native bot/workspace ID.
 
-Pointer keys are SHA-256 over a JSON tuple of provider, absolute profile root,
-native discriminator and native identity. They are manager routing keys, not
+Version 2 pointer keys are SHA-256 over a version-tagged JSON tuple of provider,
+verified device/inode identity, native discriminator and native identity.
+Local pointers bind the directory inode; native pointers bind the profile inode
+without replacing their native session/project/workspace IDs.
+They are manager routing keys, not
 RAPPIDs, a new protocol hash contract, or evidence of trust. Copilot uses the
 native session UUID; Claude uses the untouched bucket key beneath the native
 projects root; Hermes uses `[nativeTable, nativeId]`; Scout uses workspace ID.
 The original native fields remain available. No provider's shape is flattened
 into another provider's model.
+
+Version 1 keys validate against their original path spelling without native I/O.
+They are not trusted as filesystem identity. In particular, v1 Copilot metadata
+must never supply a local route or reusable YAML parse cache.
 
 ## 3. Provider partitions, selection and failure
 
@@ -79,6 +93,9 @@ Each provider partition contains exactly:
 
 - `profileRoots`: the last successfully committed profile set;
 - `requestedRoots`: the explicitly requested refresh profile set;
+- `profileIdentities`: saved device/inode identities for the successful roots;
+- `profileHistory`: at most 64 prior/current `{path,identity}` namespaces,
+  retaining v1 spellings and v2 identities solely for protection and key migration;
 - `catalog`: last-good candidate pointers, not automatically selected routes;
 - `selected`: owner-selected pointer identifiers;
 - `forgotten`: identifier-only suppression tombstones;
@@ -111,14 +128,20 @@ Enumerate only direct directories in `PROFILE/session-state`, retaining UUID
 names. Read only each UUID's `workspace.yaml`. Allowlisted fields:
 `id,cwd,git_root,repository,host_type,branch,client_name,created_at,updated_at`.
 Present IDs MUST match the native directory UUID. The reader accepts bounded
-plain/quoted/null scalars; complex YAML for allowlisted fields fails closed.
-Unknown content-bearing fields are not retained or interpreted.
+single-line plain/quoted/null scalars in one top-level mapping, using LF or CRLF.
+All keys, including ignored keys, require structural validation before proceeding
+to another key. Unsupported quoted continuations, flow collections, anchors,
+tags, indentation, alternate line separators and multiple documents fail
+closed. Only ignored indented block scalars can span lines; those lines remain
+opaque. Unknown content-bearing values are never retained as pointer metadata.
 
 Use a bounded one-level inventory and metadata batches. A checkpoint includes
 inventory directory stat fingerprints, native UUID names, offset and staged
 allowlisted pointers. Incomplete staged candidates are never active routes.
 Revalidate membership stamps on resume/completion. Reuse a prior metadata
-pointer only when its no-follow file stat fingerprint is unchanged. Missing
+version 2 pointer only when its no-follow file stat fingerprint is unchanged.
+Version 1 checkpoints restart and version 1 caches are reparsed, never promoted
+unchanged. Missing
 workspace metadata yields an unresolved identity, never a guessed repository.
 
 Do not read events.jsonl, session.db, files/, checkpoints, research, rewind,
@@ -216,11 +239,23 @@ selections and provider state.
 
 `clear` / `clear-cache` remove only manager-owned pointers/caches, selections
 and projections. A later explicit scan/refresh may rediscover an unselected
-native candidate. `forget` additionally persists an identifier-only tombstone
+native candidate. `forget` additionally persists a suppression tombstone
 until explicit `re-add`. Clear-cache MUST NOT remove tombstones. Forgetting a
 whole known catalog does not suppress future unknown native identities.
 Re-add does not fabricate native data: a suppressed native ID remains pending
 rediscovery before it can resolve locally.
+
+Local tombstones retain both original location and device/inode identity,
+covering case/slash aliases, renames and replacement at the original location.
+Re-add explicitly removes matching suppression. An old identifier-only local
+tombstone cannot prove the former filesystem identity; new local scanning fails
+closed until explicit original-spelling re-add or owner repair of manager
+metadata. No automatic upgrade may discard an unknown tombstone.
+
+Native namespace history allows a complete successful scan to translate v1
+keys and known profile aliases while preserving suppression. Native session,
+bucket, table and workspace identities must still match exactly; no new native
+identity is inferred. Incomplete/error scans never apply a partial key migration.
 
 Clear/forget discard in-progress provider staging, preserve other partitions,
 and regenerate all tracked manager views. No source identity or history is
@@ -234,14 +269,22 @@ an observation only enables later rediscovery; it never invents a mapping.
 
 The editor view contains the manager first, then selected local entries in
 owner order, then explicitly selected native references in deterministic
-provider/identifier/path order. Dedupe exact filesystem paths for the view
-only; never collapse native identities. A Claude selection can contribute
+provider/identifier/path order. Dedupe filesystem objects by device/inode for
+the view only; never collapse distinct native identities. A Claude selection can contribute
 multiple verified local associations. Copilot uses explicit cwd, otherwise
 explicit git_root; Hermes sessions without cwd stay unknown.
 
 Only existing absolute no-follow local directories are folders. Unknown,
 missing, protected and nonlocal references remain visible in the dashboard/
 catalog. Native roots are never converted to filesystem paths by guessing.
+
+Normalize ambiguous leading slash forms to the ordinary local root. Use
+no-follow descriptor identity and bounded kernel parent traversal to compare
+home, manager and registered native ancestry. Lexical prefixes, global
+case-folding or symlink-following realpath MUST NOT decide object identity or
+authorization. Filesystem lookups determine each volume's case behavior.
+Local routes must still match their stored filesystem identity when projected
+or opened; replacement at the same path requires explicit re-add.
 
 Editor output filenames MUST be direct children of the private manager and
 end in `.code-workspace`. Preserve unrelated JSON/JSONC settings, extensions
@@ -250,7 +293,9 @@ survive. Corrupt/unsafe outputs fail closed. The dashboard renders escaped
 metadata only and caps its native preview at 100 candidates per provider.
 
 Writes use exclusive same-directory staging, flush/fsync, atomic replace and
-directory fsync; manager output symlinks are refused. Registry and projections
+directory fsync; manager output symlinks and multi-link files are refused.
+Metadata readers and manager locks also refuse hardlinks before reading content
+or locking; lock descriptors are read-only. Registry and projections
 are each atomic, **not a multi-file transaction**. Registry is committed first;
 after a crash regenerate projections from it. Retained editor filenames ensure
 that previously generated views can also be rebuilt after clear/forget.
@@ -261,8 +306,9 @@ Default/hard scan limits: entries 150,000/200,000; Copilot metadata batch
 1,000/10,000; individual metadata file 2/8 MiB; per-invocation metadata bytes
 16/64 MiB; cooperative deadline 10/60 seconds. Count ignored entries too.
 
-Fixed limits: 16 provider roots, 128 scan/exact roots, recursive depth 64,
-128 lexical path components, 4 KiB strings, 32 root routing tags, 64 KiB root
+Fixed limits: 16 provider roots, 64 namespace-history entries per provider,
+128 scan/exact roots, recursive depth 64, 128 lexical path components and
+kernel ancestry steps, 4 KiB strings, 32 root routing tags, 64 KiB root
 RAPP identity file, 128 MiB compact provider catalog/stage, 512 MiB manager
 registry, 16 editor views, 8 MiB existing editor file, 2 GiB Hermes database
 stat size. Editor folder resolution allows 10,000 folders and a 10-second

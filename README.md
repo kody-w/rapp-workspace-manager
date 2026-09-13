@@ -184,8 +184,10 @@ python3 tools/workspace_manager.py re-add \
 
 `clear` and `clear-cache` are aliases. For providers, omit `--pointer` to clear
 the whole known catalog; `forget` without a pointer suppresses all **currently
-known** IDs, not future unknown identities. Forget keeps identifier-only
-tombstones. Clear-cache does not remove tombstones. Re-add does not create a
+known** IDs, not future unknown identities. Native suppression keeps opaque
+identifiers; local suppression keeps an identifier, original location and
+filesystem identity so aliases, renames and directory replacement cannot undo
+forget. Clear-cache does not remove tombstones. Re-add does not create a
 session, infer a path or touch the native store. Rediscovered candidates are
 unselected unless the owner explicitly selected/re-added their IDs.
 
@@ -211,7 +213,7 @@ The default is `estate.code-workspace` **inside the private manager**. Optional
 registry tracks generated view filenames so clear/forget also update older
 manager-generated views. Up to sixteen views are supported.
 
-Generation is deterministic, manager-first, deduplicated by exact local path,
+Generation is deterministic, manager-first, deduplicated by device/inode identity,
 and atomic per file. It preserves unrelated JSON/JSONC settings, extensions and
 other top-level values; comments/formatting may be rewritten. Invalid existing
 editor files fail closed. Only selected, existing, no-follow local directories
@@ -221,6 +223,36 @@ remain in the dashboard/catalog, never fabricated filesystem paths.
 `open` operates on unique local pointer names only. Duplicate names and
 unavailable paths are refused; it never invokes a provider lifecycle API.
 The dashboard caps its native preview at 100 candidates per provider.
+
+## Filesystem identity and legacy cache safety
+
+Pointer version 2 retains native shapes and adds no-follow filesystem identity:
+`filesystemIdentity: [device, inode]` on local pointers and `profileIdentity`
+on native pointers. Grokbot observations use the same profile identity and
+`observation_version: 2`. Display paths are locators, not identity.
+
+Leading slash aliases normalize to one ordinary `/` root. Home (including its
+ancestors), manager and registered native-profile boundaries use pinned
+directory identities and kernel parent links, not lexical path prefixes.
+Case aliases collapse only when the filesystem resolves them to the same
+device/inode; distinct names on case-sensitive volumes stay distinct.
+Symlink traversal and multiply-linked metadata/output/lock files are refused.
+Local projections also verify the saved identity, so replacing a directory at
+the same spelling does not silently retarget a selected pointer.
+
+Legacy v1 metadata stays readable, but Copilot v1 caches and checkpoints are
+untrusted for routing until a complete refresh through the structural reader.
+Multiline quoted values, flow collections, aliases, tags, unsupported indentation
+or document forms fail closed even under ignored keys. Ignored indented block
+scalars remain opaque; their continuation text never becomes metadata.
+
+Provider namespace history (bounded to 64 entries per provider) preserves
+suppression and selection while v1 keys upgrade and profile aliases change.
+Old local identifier-only tombstones lack recoverable filesystem provenance:
+new local scans fail closed with `legacy-suppression-readd-required` until
+explicit re-add using the original recorded path spelling. Unrecoverable or
+unsafe old locations require owner review of **manager metadata only**, never
+native-data deletion or automatic tombstone loss.
 
 ## Bounds and exclusions
 
@@ -235,7 +267,8 @@ Default scan limits (CLI-overridable only up to fixed ceilings):
 | Cooperative scan deadline | 10 seconds | 60 seconds |
 
 There are also fixed caps: 16 native profile roots, 128 exact/recursive scan
-roots, recursion depth 64, 4 KiB metadata strings, 128 MiB compact metadata per
+roots, recursion depth 64, 128 kernel ancestry steps, 64 saved namespaces per
+provider, 4 KiB metadata strings, 128 MiB compact metadata per
 provider catalog/stage, 512 MiB manager registry, 8 MiB existing editor files,
 64 KiB local RAPP identity files, and 2 GiB Hermes database file size (not a
 database-copy budget). Editor projection allows 10,000 folders, with a

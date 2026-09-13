@@ -104,7 +104,7 @@ class NativeAdapterTests(unittest.TestCase):
         root, path = self.copilot(1, source, extra=(
             "client_name: \"editor #1\" # comment\nupdated_at: 2026-01-01T00:00:00Z\n"
             "summary: |\n  FORBIDDEN-SUMMARY\n  cwd: /invented\n"
-            "todos: [FORBIDDEN-TODO]\n"
+            "todos: FORBIDDEN-TODO\n"
         ))
         result = native.scan_provider("copilot", [root])
         item = result["catalog"][0]
@@ -177,9 +177,10 @@ class NativeAdapterTests(unittest.TestCase):
         names = [session_id(number) for number in range(99000)]
         source_stamp = routing_io.stamp((root / "session-state").stat())
 
-        def item(profile, identity, previous, budget):
+        def item(profile, identity, previous, budget, profile_identity=None):
             return native.pointer(
                 "copilot", profile, "copilot-session", identity, nativeSessionId=identity,
+                profile_identity=profile_identity,
                 metadata={}, sourceStamp=None, availability="missing-metadata",
             ), False
 
@@ -526,7 +527,7 @@ class NativeAdapterTests(unittest.TestCase):
         root, _ = self.copilot()
         item = native.scan_provider("copilot", [root])["catalog"][0]
         for mutation in (
-            {"pointer_version": 2}, {"provider": "claude"}, {"prompt": "FORBIDDEN"},
+            {"pointer_version": 3}, {"provider": "claude"}, {"prompt": "FORBIDDEN"},
             {"pointer_type": "generic-ai-session"}, {"nativeSessionId": "../escape"},
             {"pointer_type": []}, {"availability": "missing-metadata"},
         ):

@@ -17,8 +17,10 @@ sys.path.insert(0, str(Path(__file__).absolute().parent))
 import native_ai
 from routing_io import (
     Budget, Limits, RoutingError, absolute_path, atomic_json, atomic_text,
-    directory_fd, ensure_output, manager_lock, native_path, protected_local,
-    read_bytes, read_json, reject_constant, safe_stat, unique_object, verified_directory,
+    directory_fd, directory_identity, directory_info, directories_overlap,
+    ensure_output, manager_lock, native_path, protected_local, read_bytes, read_json,
+    reject_constant, safe_stat, same_directory, same_location, unique_object,
+    validate_filesystem_identity, verified_directory, verified_directory_info,
 )
 
 
@@ -27,10 +29,12 @@ MAX_REGISTRY_BYTES = 512 * 1024 * 1024
 LOCAL_FIELDS = {
     "name", "path", "kind", "rappid", "mode", "world_id", "tags",
     "pointer_version", "pointer_type", "pointer_id", "selection",
+    "filesystemIdentity",
 }
 PROVIDER_FIELDS = {
     "profileRoots", "requestedRoots", "catalog", "selected", "forgotten", "status",
     "error", "last_attempt_utc", "last_success_utc", "pending", "observations",
+    "profileIdentities", "profileHistory",
 }
 PRUNED_DIRS = {
     ".cache", ".git", ".next", ".parcel-cache", ".venv", "__pycache__",
@@ -85,12 +89,23 @@ def discover_git_workspaces(root, budget=None, exclude=()):
     if protected_local(root):
         raise RoutingError("broad-or-native-scan-root")
     budget = budget or Budget()
-    excluded = set(map(absolute_path, exclude))
+    excluded = set()
+    for value in exclude:
+        path = value["path"] if isinstance(value, dict) else value
+        saved = value.get("identity") if isinstance(value, dict) else None
+        if saved is not None:
+            excluded.add(tuple(validate_filesystem_identity(saved)))
+        info = directory_info(path, missing_ok=True)
+        if info["identity"] is not None:
+            excluded.add(tuple(info["identity"]))
+    visited = set()
     found, queue = [], [(root, 0)]
     while queue:
         current, depth = queue.pop()
-        if current in excluded:
+        key = tuple(directory_identity(current))
+        if key in excluded or key in visited:
             continue
+        visited.add(key)
         budget.check()
         if depth > 64:
             raise RoutingError("depth-bound")
@@ -117,12 +132,25 @@ def local_id(path):
     return native_ai.pointer_id("local", absolute_path(path), "local-directory", None)
 
 
+def legacy_local_id(path):
+    return native_ai.legacy_pointer_id("local", str(path), "local-directory", None)
+
+
+def legacy_requested_ids(value):
+    canonical = absolute_path(value)
+    previous_spelling = Path(os.path.abspath(Path(os.path.expanduser(os.fspath(value)))))
+    return {legacy_local_id(canonical), legacy_local_id(previous_spelling)}
+
+
+def local_pointer_id(identity):
+    return native_ai.routing_id("local", identity, "local-directory", None)
+
+
 def read_workspace_pointer(path, rapp_module, *, exact=False, budget=None):
     path = absolute_path(path)
     if protected_local(path):
         raise RoutingError("native-store-not-workspace")
-    with directory_fd(path):
-        pass
+    filesystem_id = directory_identity(path)
     kind = "git"
     if exact:
         try:
@@ -133,16 +161,23 @@ def read_workspace_pointer(path, rapp_module, *, exact=False, budget=None):
     pointer = {
         "name": path.name, "path": str(path), "kind": kind,
         "mode": None, "world_id": None, "rappid": None, "tags": [],
-        "pointer_version": 1, "pointer_type": "local-directory",
-        "pointer_id": local_id(path), "selection": "exact" if exact else "discovered",
+        "pointer_version": 2, "pointer_type": "local-directory",
+        "pointer_id": local_pointer_id(filesystem_id),
+        "filesystemIdentity": filesystem_id, "selection": "exact" if exact else "discovered",
     }
     try:
         identity = read_json(path / "rappid.json", budget, max_bytes=65536)
     except RoutingError as error:
         if error.code in ("time-bound", "byte-bound"):
             raise
+        if directory_identity(path) != filesystem_id:
+            raise RoutingError("metadata-changed")
+        if directory_identity(path) != filesystem_id:
+            raise RoutingError("metadata-changed")
         return pointer
     if not isinstance(identity, dict):
+        if directory_identity(path) != filesystem_id:
+            raise RoutingError("metadata-changed")
         return pointer
     tags = identity.get("tags", [])
     if (
@@ -323,6 +358,7 @@ def empty_provider():
         "profileRoots": [], "requestedRoots": [], "catalog": [], "selected": [],
         "forgotten": [], "status": "never", "error": None, "last_attempt_utc": None,
         "last_success_utc": None, "pending": None, "observations": [],
+        "profileIdentities": {}, "profileHistory": [],
     }
 
 
@@ -357,17 +393,22 @@ def validate_registry(registry):
             raise RoutingError("registry-schema-mismatch")
     ids = set()
     for item in registry["workspaces"]:
+        version = item.get("pointer_version") if isinstance(item, dict) else None
         if (
-            not isinstance(item, dict) or set(item) != LOCAL_FIELDS
-            or type(item["pointer_version"]) is not int or item["pointer_version"] != 1
+            not isinstance(item, dict)
+            or type(version) is not int or version not in (1, 2)
+            or set(item) != (LOCAL_FIELDS - ({"filesystemIdentity"} if version == 1 else set()))
             or item["pointer_type"] != "local-directory"
-            or native_path(item["path"]) is None or item["path"] != str(absolute_path(item["path"]))
-            or item["pointer_id"] != local_id(item["path"])
+            or native_path(item["path"]) is None
+            or version == 2 and item["path"] != str(absolute_path(item["path"]))
             or item["selection"] not in ("exact", "discovered")
             or item["kind"] not in ("git", "directory", "rapp-workspace")
             or item["mode"] not in (None, "solo", "hive") or item["pointer_id"] in ids
         ):
             raise RoutingError("pointer-schema-mismatch")
+        expected = legacy_local_id(item["path"]) if version == 1 else local_pointer_id(item["filesystemIdentity"])
+        if item["pointer_id"] != expected:
+            raise RoutingError("pointer-identity-mismatch")
         for field in ("name", "rappid", "world_id"):
             native_ai.text(item[field], optional=field != "name")
         if not isinstance(item["tags"], list) or len(item["tags"]) > 32:
@@ -375,8 +416,8 @@ def validate_registry(registry):
         for tag in item["tags"]:
             native_ai.text(tag)
         ids.add(item["pointer_id"])
-    validate_ids(registry["forgotten"], "local")
-    if ids & set(registry["forgotten"]):
+    forgotten_ids = validate_local_suppressions(registry["forgotten"])
+    if ids & forgotten_ids:
         raise RoutingError("suppressed-pointer-active")
     for provider, state in registry["providers"].items():
         if provider not in native_ai.PROVIDERS or not isinstance(state, dict) or set(state) != PROVIDER_FIELDS:
@@ -384,8 +425,19 @@ def validate_registry(registry):
         for field in ("profileRoots", "requestedRoots"):
             if not isinstance(state[field], list) or len(state[field]) > 16:
                 raise RoutingError("provider-schema-mismatch")
-            if any(native_path(root) is None or str(absolute_path(root)) != root for root in state[field]):
+            if any(native_path(root) is None for root in state[field]):
                 raise RoutingError("provider-schema-mismatch")
+        if not isinstance(state["profileIdentities"], dict) or set(state["profileIdentities"]) - set(state["profileRoots"]):
+            raise RoutingError("provider-schema-mismatch")
+        for value in state["profileIdentities"].values():
+            validate_filesystem_identity(value)
+        if not isinstance(state["profileHistory"], list) or len(state["profileHistory"]) > 64:
+            raise RoutingError("profile-history-bound")
+        for value in state["profileHistory"]:
+            if not isinstance(value, dict) or set(value) != {"path", "identity"} or native_path(value["path"]) is None:
+                raise RoutingError("provider-schema-mismatch")
+            if value["identity"] is not None:
+                validate_filesystem_identity(value["identity"])
         for field in ("selected", "forgotten"):
             validate_ids(state[field], provider)
         if set(state["selected"]) & set(state["forgotten"]):
@@ -408,21 +460,32 @@ def validate_registry(registry):
             ):
                 raise RoutingError("provider-partition-mismatch")
             catalog_ids.add(item["pointer_id"])
+            if item["pointer_version"] == 2 and state["profileIdentities"].get(item["profileRoot"]) != item["profileIdentity"]:
+                raise RoutingError("provider-partition-mismatch")
         if state["pending"] is not None and provider != "copilot":
             raise RoutingError("provider-schema-mismatch")
         native_ai.validate_pending(state["pending"], state["requestedRoots"], Limits(max_entries=200000))
         if not isinstance(state["observations"], list) or len(state["observations"]) > 16:
             raise RoutingError("provider-schema-mismatch")
         for item in state["observations"]:
+            modern = isinstance(item, dict) and item.get("observation_version") == 2
+            fields = {"provider", "profileRoot", "state", "mapping", "observation_id"}
+            if modern:
+                fields |= {"observation_version", "profileIdentity"}
             if (
                 provider != "grokbot" or not isinstance(item, dict)
-                or set(item) != {"provider", "profileRoot", "state", "mapping", "observation_id"}
+                or set(item) != fields
                 or item["provider"] != provider or item["profileRoot"] not in state["profileRoots"]
                 or item["state"] != "app-detected" or item["mapping"] != "workspace-mapping-unavailable"
-                or item["observation_id"] != native_ai.grokbot_observation_id(item["profileRoot"])
                 or item["observation_id"] in forgotten
+                or modern and type(item["observation_version"]) is not int
             ):
                 raise RoutingError("provider-schema-mismatch")
+            expected = native_ai.routing_id("grokbot", item["profileIdentity"], "app-observation", None) if modern else native_ai.legacy_pointer_id(
+                "grokbot", item["profileRoot"], "app-observation", None
+            )
+            if item["observation_id"] != expected or modern and state["profileIdentities"].get(item["profileRoot"]) != item["profileIdentity"]:
+                raise RoutingError("provider-partition-mismatch")
     editor_name(registry["editor_view"])
     views = registry["editor_views"]
     if (
@@ -453,8 +516,13 @@ def load_registry(workspace):
             raise RoutingError("registry-schema-mismatch")
         item.setdefault("pointer_version", 1)
         item.setdefault("pointer_type", "local-directory")
-        item.setdefault("pointer_id", local_id(item["path"]))
+        item.setdefault("pointer_id", legacy_local_id(item["path"]))
         item.setdefault("selection", "discovered")
+    for state in registry["providers"].values():
+        if not isinstance(state, dict):
+            raise RoutingError("provider-schema-mismatch")
+        state.setdefault("profileIdentities", {})
+        state.setdefault("profileHistory", [])
     validate_registry(registry)
     return registry
 
@@ -466,12 +534,117 @@ def all_profile_roots(registry):
     ]
 
 
+def all_profile_boundaries(registry):
+    return [
+        boundary for state in registry["providers"].values()
+        for boundary in (
+            [{"path": root, "identity": state["profileIdentities"].get(root)}
+             for root in state["profileRoots"] + state["requestedRoots"]]
+            + state["profileHistory"]
+        )
+    ]
+
+
+def native_address(item):
+    if "observation_id" in item:
+        return "app-observation", None, item["observation_id"]
+    kind = item["pointer_type"]
+    if kind == "copilot-session":
+        identity = item["nativeSessionId"]
+    elif kind == "claude-project":
+        identity = item["nativeKey"]
+    elif kind.startswith("hermes-"):
+        identity = [item["nativeTable"], item["nativeId"]]
+    else:
+        identity = item["workspaceId"]
+    return kind, identity, item["pointer_id"]
+
+
+def remap_native_identities(state, result):
+    """Carry selection/suppression across proven aliases and v1 key upgrades."""
+    history = list(state["profileHistory"])
+    history.extend({
+        "path": root, "identity": state["profileIdentities"].get(root),
+    } for root in state["profileRoots"])
+    history.extend({
+        "path": root, "identity": result["profileIdentities"][root],
+    } for root in result["profileRoots"])
+    unique = {json.dumps(value, sort_keys=True): value for value in history}
+    history = [unique[key] for key in sorted(unique)]
+    if len(history) > 64:
+        raise RoutingError("profile-history-bound")
+    aliases = {}
+    for root in result["profileRoots"]:
+        equivalents = []
+        for value in history:
+            equivalent = value["identity"] == result["profileIdentities"][root]
+            if not equivalent:
+                try:
+                    equivalent = same_location(value["path"], root)
+                except RoutingError:
+                    equivalent = False
+            if equivalent:
+                equivalents.append(value)
+        aliases[root] = equivalents
+    selected, forgotten = set(state["selected"]), set(state["forgotten"])
+    for item in result["catalog"] + result["observations"]:
+        kind, identity, key = native_address(item)
+        keys = {key}
+        for value in aliases[item["profileRoot"]]:
+            keys.add(native_ai.legacy_pointer_id(result["provider"], value["path"], kind, identity))
+            if value["identity"] is not None:
+                keys.add(native_ai.routing_id(result["provider"], value["identity"], kind, identity))
+        if forgotten & keys:
+            forgotten.difference_update(keys)
+            forgotten.add(key)
+            selected.difference_update(keys)
+        elif selected & keys:
+            selected.difference_update(keys)
+            selected.add(key)
+    return sorted(selected), forgotten, history
+
+
 def check_route_boundary(workspace, path, registry):
     workspace, path = absolute_path(workspace), absolute_path(path)
-    if path == workspace or path in workspace.parents or workspace in path.parents:
+    if directories_overlap(path, workspace):
         raise RoutingError("manager-route-overlap")
-    if protected_local(path, all_profile_roots(registry)):
+    if protected_local(path, all_profile_boundaries(registry)):
         raise RoutingError("native-store-not-workspace")
+
+
+def validate_local_suppressions(values):
+    if not isinstance(values, list) or len(values) > 200000:
+        raise RoutingError("selection-schema-mismatch")
+    ids = []
+    for value in values:
+        if isinstance(value, str):
+            validate_ids([value], "local")
+            ids.append(value)
+        else:
+            if (
+                not isinstance(value, dict) or set(value) != {"pointer_id", "path", "filesystemIdentity"}
+                or native_path(value["path"]) is None
+                or value["pointer_id"] != local_pointer_id(value["filesystemIdentity"])
+            ):
+                raise RoutingError("selection-schema-mismatch")
+            ids.append(value["pointer_id"])
+    if len(ids) != len(set(ids)):
+        raise RoutingError("selection-schema-mismatch")
+    return set(ids)
+
+
+def matches_local(value, path, identity=None):
+    if isinstance(value, str):
+        return value == legacy_local_id(str(path))
+    if identity is not None and value.get("filesystemIdentity") == identity:
+        return True
+    return same_location(value["path"], path)
+
+
+def local_suppressed(registry, path, identity):
+    if any(isinstance(value, str) for value in registry["forgotten"]):
+        raise RoutingError("legacy-suppression-readd-required")
+    return any(matches_local(value, path, identity) for value in registry["forgotten"])
 
 
 def editor_name(value):
@@ -549,22 +722,22 @@ def parse_editor(raw):
 def editor_folders(workspace, registry):
     workspace = absolute_path(workspace)
     folders = [{"name": "RAPP Workspace Manager", "path": str(workspace)}]
-    seen, profiles = {str(workspace)}, all_profile_roots(registry)
+    seen, profiles = {tuple(directory_identity(workspace))}, all_profile_boundaries(registry)
     budget = Budget(Limits(max_entries=200000))
 
-    def add(name, candidate):
+    def add(name, candidate, expected_identity=None):
         budget.check()
-        local = verified_directory(candidate, profiles)
-        if local is not None and local not in seen:
+        info = verified_directory_info(candidate, profiles, expected_identity)
+        if info is not None and tuple(info["identity"]) not in seen:
             if len(folders) >= 10000:
                 raise RoutingError("editor-folder-count-bound")
-            check_route_boundary(workspace, local, registry)
-            folders.append({"name": name, "path": local})
-            seen.add(local)
+            check_route_boundary(workspace, info["path"], registry)
+            folders.append({"name": name, "path": info["path"]})
+            seen.add(tuple(info["identity"]))
 
     for item in registry["workspaces"]:
         budget.entry()
-        add(item["name"], item["path"])
+        add(item["name"], item["path"], item.get("filesystemIdentity"))
     for provider, state in sorted(registry["providers"].items()):
         selected = set(state["selected"])
         for item in sorted(state["catalog"], key=lambda item: item["pointer_id"]):
@@ -624,28 +797,43 @@ def scan_manager(args):
     exact, budget = getattr(args, "mode", "recursive") == "exact", Budget(cli_limits(args))
     with manager_lock(workspace):
         registry = load_registry(workspace)
-        profiles = list(map(Path, all_profile_roots(registry)))
+        boundaries = all_profile_boundaries(registry)
+        profile_ids = []
+        for boundary in boundaries:
+            budget.check()
+            profile_ids.extend(
+                value for value in (boundary["identity"], directory_info(boundary["path"], missing_ok=True)["identity"])
+                if value is not None
+            )
         for root in map(Path, roots):
-            if any(root == profile or profile in root.parents for profile in profiles):
+            budget.check()
+            info = directory_info(root)
+            if any(value in info["ancestors"] for value in profile_ids):
                 raise RoutingError("native-store-not-workspace")
         paths = list(map(Path, roots)) if exact else sorted({
             path for root in roots
-            for path in discover_git_workspaces(root, budget, exclude=(workspace, *profiles))
+            for path in discover_git_workspaces(root, budget, exclude=(workspace, *boundaries))
         }, key=str)
-        entries, forgotten = [], set(registry["forgotten"])
+        entries, seen = [], set()
+        manager_fs_identity = directory_identity(workspace)
         for path in paths:
             budget.check()
-            if path == workspace:
+            filesystem_id = directory_identity(path)
+            key = tuple(filesystem_id)
+            if filesystem_id == manager_fs_identity or key in seen:
                 continue
+            seen.add(key)
             check_route_boundary(workspace, path, registry)
-            if local_id(path) not in forgotten:
+            if not local_suppressed(registry, path, filesystem_id):
                 entries.append(read_workspace_pointer(path, rapp, exact=exact, budget=budget))
         if exact:
             registry["workspaces"] = entries
         else:
             retained = [item for item in registry["workspaces"] if item["selection"] == "exact"]
-            retained_ids = {item["pointer_id"] for item in retained}
-            registry["workspaces"] = retained + [item for item in entries if item["pointer_id"] not in retained_ids]
+            registry["workspaces"] = retained + [
+                item for item in entries
+                if not any(matches_local(existing, item["path"], item["filesystemIdentity"]) for existing in retained)
+            ]
         registry.update(scan_roots=roots, generated_utc=utc_now())
         save_registry(workspace, identity, registry)
     print(f"SCANNED {len(entries)} {'exact' if exact else 'Git'} pointers; native selections unchanged")
@@ -656,6 +844,15 @@ def refresh_provider(workspace, provider, profile_roots=None, limits=None):
     identity = manager_identity(workspace)
     if provider not in native_ai.PROVIDERS:
         raise RoutingError("unknown-provider")
+    preflight = load_registry(workspace)["providers"].get(provider, empty_provider())
+    preflight_roots = profile_roots if profile_roots is not None else (
+        preflight["requestedRoots"] or preflight["profileRoots"]
+    )
+    if len(preflight_roots) > 16:
+        raise RoutingError("profile-count-bound")
+    for root in preflight_roots:
+        if directories_overlap(root, workspace):
+            raise RoutingError("manager-native-overlap")
     with manager_lock(workspace):
         registry = load_registry(workspace)
         previous = registry["providers"].get(provider, empty_provider())
@@ -665,11 +862,11 @@ def refresh_provider(workspace, provider, profile_roots=None, limits=None):
             raise RoutingError("profile-count-bound")
         roots = sorted({str(absolute_path(root)) for root in supplied})
         for root in map(Path, roots):
-            if root == workspace or root in workspace.parents or workspace in root.parents:
+            if directories_overlap(root, workspace):
                 raise RoutingError("manager-native-overlap")
             for item in registry["workspaces"]:
                 local = Path(item["path"])
-                if root == local or root in local.parents or local in root.parents:
+                if directories_overlap(root, local):
                     raise RoutingError("native-root-overlaps-local-route")
         if roots != state["requestedRoots"]:
             state["pending"] = None
@@ -679,16 +876,18 @@ def refresh_provider(workspace, provider, profile_roots=None, limits=None):
                 provider, roots, previous=state["catalog"], pending=state["pending"], limits=limits,
             )
             if result["complete"]:
-                forgotten = set(state["forgotten"])
+                selected, forgotten, history = remap_native_identities(state, result)
                 state.update(
-                    profileRoots=roots,
+                    profileRoots=result["profileRoots"], requestedRoots=result["profileRoots"],
+                    profileIdentities=result["profileIdentities"], profileHistory=history,
+                    selected=selected, forgotten=sorted(forgotten),
                     catalog=[item for item in result["catalog"] if item["pointer_id"] not in forgotten],
                     observations=[item for item in result["observations"] if item["observation_id"] not in forgotten],
                     pending=None,
                     status="fresh", last_success_utc=utc_now(),
                 )
             else:
-                state.update(status="refreshing", pending=result["pending"])
+                state.update(status="refreshing", pending=result["pending"], requestedRoots=result["profileRoots"])
         except RoutingError as error:
             state.update(status="stale", error=error.code, pending=None)
             result = {"examined": 0, "reused": 0}
@@ -758,21 +957,45 @@ def provider_action(workspace, provider, action, pointer_id=None):
 
 def local_action(args):
     workspace, path = absolute_path(args.workspace), absolute_path(args.path)
-    identity, key = manager_identity(workspace), local_id(path)
+    identity = manager_identity(workspace)
     with manager_lock(workspace):
         registry = load_registry(workspace)
+        info = directory_info(path, missing_ok=True)
+        filesystem_id = info["identity"]
+        matches = [item for item in registry["workspaces"] if matches_local(item, path, filesystem_id)]
         if args.command == "re-add":
             check_route_boundary(workspace, path, registry)
+            legacy = [value for value in registry["forgotten"] if isinstance(value, str)]
+            requested_legacy = legacy_requested_ids(args.path)
+            if legacy and not requested_legacy.intersection(legacy):
+                raise RoutingError("legacy-suppression-readd-required")
             rapp = load_rapp(find_rapp1(args.rapp1_path))
             item = read_workspace_pointer(path, rapp, exact=True)
-            registry["forgotten"] = [value for value in registry["forgotten"] if value != key]
-            registry["workspaces"] = [value for value in registry["workspaces"] if value["pointer_id"] != key] + [item]
+            registry["forgotten"] = [
+                value for value in registry["forgotten"]
+                if not (
+                    isinstance(value, str) and value in requested_legacy
+                    or not isinstance(value, str) and matches_local(value, path, item["filesystemIdentity"])
+                )
+            ]
+            registry["workspaces"] = [value for value in registry["workspaces"] if value not in matches] + [item]
         else:
-            if not any(item["pointer_id"] == key for item in registry["workspaces"]):
+            if not matches:
                 raise RoutingError("unknown-pointer")
-            registry["workspaces"] = [item for item in registry["workspaces"] if item["pointer_id"] != key]
+            registry["workspaces"] = [item for item in registry["workspaces"] if item not in matches]
             if args.command == "forget":
-                registry["forgotten"] = sorted(set(registry["forgotten"]) | {key})
+                for item in matches:
+                    saved_identity = item.get("filesystemIdentity") or filesystem_id
+                    if saved_identity is None:
+                        tombstone = item["pointer_id"]
+                    else:
+                        tombstone = {
+                            "pointer_id": local_pointer_id(saved_identity),
+                            "path": str(absolute_path(item["path"])), "filesystemIdentity": saved_identity,
+                        }
+                    key = tombstone if isinstance(tombstone, str) else tombstone["pointer_id"]
+                    if key not in validate_local_suppressions(registry["forgotten"]):
+                        registry["forgotten"].append(tombstone)
         registry["generated_utc"] = utc_now()
         save_registry(workspace, identity, registry)
     print(f"{args.command.upper()} manager pointer only")
@@ -786,7 +1009,7 @@ def editor_manager(args):
         if args.output:
             output = Path(args.output)
             if output.is_absolute():
-                if absolute_path(output).parent != workspace:
+                if not same_directory(absolute_path(output).parent, workspace):
                     raise RoutingError("editor-output-must-be-manager-owned")
                 output = output.name
             registry["editor_view"] = editor_name(str(output))
@@ -808,7 +1031,9 @@ def open_manager(args):
         raise RoutingError("workspace-not-registered")
     if len(matches) > 1:
         raise RoutingError("workspace-name-ambiguous")
-    path = verified_directory(matches[0]["path"], all_profile_roots(registry))
+    path = verified_directory(
+        matches[0]["path"], all_profile_boundaries(registry), matches[0].get("filesystemIdentity")
+    )
     if path is None:
         raise RoutingError("local-route-unavailable")
     check_route_boundary(args.workspace, path, registry)

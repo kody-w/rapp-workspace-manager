@@ -10,13 +10,14 @@ from pathlib import Path
 
 from routing_io import (
     Budget, Limits, RoutingError, absolute_path, child_directories, directory_fd,
-    native_path, read_bytes, read_json, regular_fd, safe_stat, stamp,
-    verified_directory,
+    directory_identity, directory_info, native_path, read_bytes, read_json,
+    regular_fd, safe_stat, stamp, unique_directories, validate_filesystem_identity,
+    verified_directory_info,
 )
 
 
 PROVIDERS = ("copilot", "claude", "hermes", "scout", "grokbot")
-POINTER_VERSION = 1
+POINTER_VERSION = 2
 MAX_CATALOG_BYTES = 128 * 1024 * 1024
 UUID = re.compile(r"^[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}$")
 COPILOT_FIELDS = {
@@ -34,7 +35,7 @@ HERMES_TABLES = {
         "hermes-folder", {"id", "project_id", "path", "created_at", "updated_at"}
     ),
 }
-COMMON = {"pointer_version", "pointer_type", "pointer_id", "provider", "profileRoot"}
+COMMON = {"pointer_version", "pointer_type", "pointer_id", "provider", "profileRoot", "profileIdentity"}
 POINTER_FIELDS = {
     "copilot-session": COMMON | {"nativeSessionId", "metadata", "sourceStamp", "availability"},
     "claude-project": COMMON | {
@@ -70,7 +71,7 @@ def scalar(value):
     return text(value, optional=True)
 
 
-def pointer_id(provider, profile_root, native_kind, native_id):
+def legacy_pointer_id(provider, profile_root, native_kind, native_id):
     key = json.dumps(
         [provider, str(profile_root), native_kind, native_id],
         ensure_ascii=True, separators=(",", ":"), allow_nan=False,
@@ -78,17 +79,33 @@ def pointer_id(provider, profile_root, native_kind, native_id):
     return provider + ":" + hashlib.sha256(key.encode("utf-8")).hexdigest()
 
 
-def grokbot_observation_id(root):
-    return pointer_id("grokbot", root, "app-observation", None)
+def routing_id(provider, identity, native_kind, native_id):
+    validate_filesystem_identity(identity)
+    key = json.dumps(
+        ["filesystem-pointer/2", provider, identity, native_kind, native_id],
+        ensure_ascii=True, separators=(",", ":"), allow_nan=False,
+    )
+    return provider + ":" + hashlib.sha256(key.encode("utf-8")).hexdigest()
 
 
-def pointer(provider, root, kind, native_id, **metadata):
+def pointer_id(provider, profile_root, native_kind, native_id, *, profile_identity=None):
+    identity = directory_identity(profile_root) if profile_identity is None else profile_identity
+    return routing_id(provider, identity, native_kind, native_id)
+
+
+def grokbot_observation_id(root, *, profile_identity=None):
+    return pointer_id("grokbot", root, "app-observation", None, profile_identity=profile_identity)
+
+
+def pointer(provider, root, kind, native_id, *, profile_identity=None, **metadata):
+    identity = directory_identity(root) if profile_identity is None else profile_identity
     value = {
         "pointer_version": POINTER_VERSION,
         "pointer_type": kind,
-        "pointer_id": pointer_id(provider, root, kind, native_id),
+        "pointer_id": routing_id(provider, identity, kind, native_id),
         "provider": provider,
-        "profileRoot": str(root),
+        "profileRoot": str(absolute_path(root)),
+        "profileIdentity": identity,
         **metadata,
     }
     validate_pointer(value)
@@ -106,15 +123,18 @@ def validate_pointer(value):
     if not isinstance(value, dict):
         raise RoutingError("pointer-schema-mismatch")
     kind = value.get("pointer_type")
+    version = value.get("pointer_version")
     if (
-        not isinstance(kind, str) or kind not in POINTER_FIELDS or set(value) != POINTER_FIELDS[kind]
-        or type(value.get("pointer_version")) is not int
-        or value["pointer_version"] != POINTER_VERSION
+        not isinstance(kind, str) or kind not in POINTER_FIELDS
+        or type(version) is not int or version not in (1, POINTER_VERSION)
+        or set(value) != (POINTER_FIELDS[kind] - ({"profileIdentity"} if version == 1 else set()))
     ):
         raise RoutingError("pointer-schema-mismatch")
     root = text(value["profileRoot"])
-    if native_path(root) is None or str(absolute_path(root)) != root:
+    if native_path(root) is None or version == 2 and str(absolute_path(root)) != root:
         raise RoutingError("pointer-schema-mismatch")
+    if version == 2:
+        validate_filesystem_identity(value["profileIdentity"])
     if kind == "copilot-session":
         provider = "copilot"
         identity = text(value["nativeSessionId"])
@@ -191,10 +211,10 @@ def validate_pointer(value):
             raise RoutingError("pointer-schema-mismatch")
         text(value["providerId"])
         text(value["rootId"])
-    if (
-        value["provider"] != provider
-        or value["pointer_id"] != pointer_id(provider, root, kind, identity)
-    ):
+    expected = legacy_pointer_id(provider, root, kind, identity) if version == 1 else routing_id(
+        provider, value["profileIdentity"], kind, identity
+    )
+    if value["provider"] != provider or value["pointer_id"] != expected:
         raise RoutingError("pointer-identity-mismatch")
     return value
 
@@ -203,6 +223,8 @@ def local_paths(value, profile_roots=()):
     """Resolve only explicit native references, never names, slugs or breadcrumbs."""
     validate_pointer(value)
     kind = value["pointer_type"]
+    if kind == "copilot-session" and value["pointer_version"] == 1:
+        return []
     candidates = []
     if kind == "copilot-session":
         metadata = value["metadata"]
@@ -216,11 +238,15 @@ def local_paths(value, profile_roots=()):
         candidates = [value["metadata"].get(field)]
     elif kind == "scout-workspace" and value["providerId"] == "local":
         candidates = [value["rootId"]]
-    roots = list(profile_roots) + [value["profileRoot"]]
-    return sorted({
-        path for candidate in candidates
-        if (path := verified_directory(candidate, roots)) is not None
-    })
+    roots = list(profile_roots) + [{
+        "path": value["profileRoot"], "identity": value.get("profileIdentity"),
+    }]
+    found = {}
+    for candidate in candidates:
+        info = verified_directory_info(candidate, roots)
+        if info is not None:
+            found.setdefault(tuple(info["identity"]), info["path"])
+    return sorted(found.values())
 
 
 def describe(value):
@@ -240,6 +266,8 @@ def routing_hint(value):
     if value["pointer_type"] == "claude-project":
         return value["availability"]
     if value["pointer_type"] == "copilot-session":
+        if value["pointer_version"] == 1:
+            return "refresh required: legacy YAML reader"
         return "cwd/git_root reference" if value["metadata"].get("cwd") or value["metadata"].get("git_root") else "unknown cwd"
     if value["pointer_type"].startswith("hermes-"):
         return "native path reference" if value["metadata"].get("path") or value["metadata"].get("cwd") else "unknown path"
@@ -247,50 +275,93 @@ def routing_hint(value):
 
 
 def _yaml_metadata(raw):
-    """A scalar-only reader, intentionally not a general YAML interpreter."""
+    """A single-document scalar mapping, with ignored block scalars kept opaque."""
     try:
-        lines = raw.decode("utf-8").splitlines()
+        decoded = raw.decode("utf-8")
     except UnicodeError:
         raise RoutingError("malformed-metadata") from None
-    metadata = {}
+    if any(char in decoded for char in "\x0b\x0c\x1c\x1d\x1e\x85\u2028\u2029"):
+        raise RoutingError("schema-mismatch")
+    if "\r" in decoded.replace("\r\n", ""):
+        raise RoutingError("schema-mismatch")
+    lines = decoded.replace("\r\n", "\n").split("\n")
+    metadata, seen = {}, set()
+    ignored_block = False
+    document_started = False
+    document_ended = False
     for line in lines:
-        match = re.fullmatch(r"([A-Za-z_][A-Za-z0-9_]*):(?:\s+(.*)|\s*)", line)
-        if not match or match[1] not in COPILOT_FIELDS:
+        if not line.strip(" \t") or line.lstrip(" \t").startswith("#"):
             continue
-        key, value = match[1], (match[2] or "").strip()
-        if key in metadata:
+        if "\t" in line[:len(line) - len(line.lstrip())]:
             raise RoutingError("schema-mismatch")
+        if line.startswith(" "):
+            if ignored_block:
+                continue
+            raise RoutingError("schema-mismatch")
+        ignored_block = False
+        if line == "---" and not document_started and not document_ended:
+            document_started = True
+            continue
+        if line == "..." and document_started and not document_ended:
+            document_ended = True
+            continue
+        if document_ended:
+            raise RoutingError("schema-mismatch")
+        match = re.fullmatch(r"([A-Za-z_][A-Za-z0-9_]*):(?:[ ]+(.*)|[ ]*)", line)
+        if not match:
+            raise RoutingError("schema-mismatch")
+        key, value = match[1], (match[2] or "").strip(" ")
+        document_started = True
+        if key in seen:
+            raise RoutingError("schema-mismatch")
+        seen.add(key)
+        if value.startswith(("|", ">")):
+            if key in COPILOT_FIELDS or not re.fullmatch(r"[|>][+-]?(?: +#.*)?", value):
+                raise RoutingError("schema-mismatch")
+            ignored_block = True
+            continue
+        # Unknown keys still need structural validation. In particular an open
+        # quote cannot turn its continuation into an allowlisted top-level key.
         if value.startswith('"'):
             try:
                 value, end = json.JSONDecoder().raw_decode(value)
-                if match[2].strip()[end:].strip() and not match[2].strip()[end:].lstrip().startswith("#"):
+                tail = match[2].strip(" ")[end:]
+                if tail and not re.fullmatch(r"[ \t]+(?:#.*)?", tail):
                     raise ValueError
             except (ValueError, TypeError):
                 raise RoutingError("schema-mismatch") from None
         elif value.startswith("'"):
-            quoted = re.fullmatch(r"'((?:[^']|'')*)'(?:\s+#.*)?", value)
+            quoted = re.fullmatch(r"'((?:[^']|'')*)'(?:[ \t]+#.*)?", value)
             if not quoted:
                 raise RoutingError("schema-mismatch")
             value = quoted[1].replace("''", "'")
         else:
-            value = re.split(r"\s+#", value, maxsplit=1)[0].rstrip()
+            value = re.split(r"[ \t]+#", value, maxsplit=1)[0].rstrip(" \t")
             if value in ("", "null", "Null", "NULL", "~") or value.startswith("#"):
                 value = None
-            elif value[0] in "[{!&*|>" or ": " in value:
+            elif (
+                value[0] in "[]{},!&*|>%@`"
+                or re.search(r":(?:$|[ \t])", value)
+                or value[0] in "-?:" and (len(value) == 1 or value[1] in " \t")
+            ):
                 raise RoutingError("schema-mismatch")
-        metadata[key] = text(value, optional=True)
+        if key in COPILOT_FIELDS:
+            metadata[key] = text(value, optional=True)
     if not metadata:
         raise RoutingError("schema-mismatch")
     return metadata
 
 
-def _copilot_item(root, session_id, previous, budget):
+def _copilot_item(root, session_id, previous, budget, profile_identity=None):
     path = root / "session-state" / session_id / "workspace.yaml"
     info = safe_stat(path, missing_ok=True)
     source_stamp = stamp(info) if info else None
     if info is not None and info.st_size > budget.limits.max_file_bytes:
         raise RoutingError("file-size-bound")
-    if previous and source_stamp is not None and previous["sourceStamp"] == source_stamp:
+    if (
+        previous and previous["pointer_version"] == 2
+        and source_stamp is not None and previous["sourceStamp"] == source_stamp
+    ):
         return previous, True
     if info is not None and not stat.S_ISREG(info.st_mode):
         raise RoutingError("not-regular-metadata")
@@ -299,26 +370,32 @@ def _copilot_item(root, session_id, previous, budget):
         raise RoutingError("metadata-changed")
     return pointer(
         "copilot", root, "copilot-session", session_id,
+        profile_identity=profile_identity,
         nativeSessionId=session_id, metadata=metadata, sourceStamp=source_stamp,
         availability="metadata" if info else "missing-metadata",
     ), False
 
 
 def _copilot(roots, previous, pending, budget):
+    if pending is not None and pending.get("version") == 1:
+        pending = None
     if pending is None:
         inventories = []
         for root in roots:
             names, source_stamp = child_directories(root / "session-state", budget)
             inventories.append({
                 "profileRoot": str(root), "stamp": source_stamp,
+                "profileIdentity": directory_identity(root),
                 "names": [name for name in names if UUID.fullmatch(name)],
             })
         pending = {
-            "version": 1, "inventories": inventories,
+            "version": 2, "inventories": inventories,
             "profile_index": 0, "offset": 0, "catalog": [],
         }
     validate_pending(pending, roots, budget.limits)
     for inventory in pending["inventories"]:
+        if directory_identity(inventory["profileRoot"]) != inventory["profileIdentity"]:
+            raise RoutingError("inventory-changed-retry")
         with directory_fd(Path(inventory["profileRoot"]) / "session-state") as fd:
             if stamp(os.fstat(fd)) != inventory["stamp"]:
                 raise RoutingError("inventory-changed-retry")
@@ -341,14 +418,16 @@ def _copilot(roots, previous, pending, budget):
         budget.check()
         session_id = names[pending["offset"]]
         root = Path(inventory["profileRoot"])
-        key = pointer_id("copilot", root, "copilot-session", session_id)
-        item, cached = _copilot_item(root, session_id, old.get(key), budget)
+        key = routing_id("copilot", inventory["profileIdentity"], "copilot-session", session_id)
+        item, cached = _copilot_item(root, session_id, old.get(key), budget, inventory["profileIdentity"])
         pending["catalog"].append(item)
         pending["offset"] += 1
         processed += 1
         reused += int(cached)
     complete = pending["profile_index"] == len(roots)
     for inventory in pending["inventories"]:
+        if directory_identity(inventory["profileRoot"]) != inventory["profileIdentity"]:
+            raise RoutingError("inventory-changed-retry")
         with directory_fd(Path(inventory["profileRoot"]) / "session-state") as fd:
             if stamp(os.fstat(fd)) != inventory["stamp"]:
                 raise RoutingError("inventory-changed-retry")
@@ -367,7 +446,7 @@ def validate_pending(pending, roots, limits=None):
     if (
         not isinstance(pending, dict)
         or set(pending) != {"version", "inventories", "profile_index", "offset", "catalog"}
-        or type(pending["version"]) is not int or pending["version"] != 1
+        or type(pending["version"]) is not int or pending["version"] not in (1, 2)
         or not isinstance(pending["inventories"], list)
         or len(pending["inventories"]) != len(roots)
         or not isinstance(pending["catalog"], list)
@@ -383,13 +462,17 @@ def validate_pending(pending, roots, limits=None):
     for index, inventory in enumerate(pending["inventories"]):
         if (
             not isinstance(inventory, dict)
-            or set(inventory) != {"profileRoot", "stamp", "names"}
+            or set(inventory) != (
+                {"profileRoot", "stamp", "names"} | ({"profileIdentity"} if pending["version"] == 2 else set())
+            )
             or inventory["profileRoot"] != str(roots[index])
             or not isinstance(inventory["stamp"], list) or len(inventory["stamp"]) != 5
             or any(type(n) is not int or n < 0 for n in inventory["stamp"])
             or not isinstance(inventory["names"], list)
         ):
             raise RoutingError("checkpoint-schema-mismatch")
+        if pending["version"] == 2:
+            validate_filesystem_identity(inventory["profileIdentity"])
         names = inventory["names"]
         if any(not isinstance(name, str) or not UUID.fullmatch(name) for name in names):
             raise RoutingError("checkpoint-schema-mismatch")
@@ -410,11 +493,18 @@ def validate_pending(pending, roots, limits=None):
         validate_pointer(item)
         if item["provider"] != "copilot" or item["profileRoot"] != root or item["nativeSessionId"] != session_id:
             raise RoutingError("checkpoint-schema-mismatch")
+        if item["pointer_version"] != pending["version"]:
+            raise RoutingError("checkpoint-schema-mismatch")
+        if pending["version"] == 2:
+            inventory = next(value for value in pending["inventories"] if value["profileRoot"] == root)
+            if item["profileIdentity"] != inventory["profileIdentity"]:
+                raise RoutingError("checkpoint-schema-mismatch")
 
 
 def _claude(roots, budget):
     catalog = []
     for root in roots:
+        profile_identity = directory_identity(root)
         native_root = root / "projects"
         names, source_stamp = child_directories(native_root, budget)
         for name in names:
@@ -449,12 +539,15 @@ def _claude(roots, budget):
                 ]
             catalog.append(pointer(
                 "claude", root, "claude-project", name, nativeRoot=str(native_root),
+                profile_identity=profile_identity,
                 nativeKey=name, indexVersion=version, originalPath=original,
                 pathAssociations=associations, availability="indexed" if info else "missing-index",
             ))
         with directory_fd(native_root) as fd:
             if stamp(os.fstat(fd)) != source_stamp:
                 raise RoutingError("metadata-changed")
+        if directory_identity(root) != profile_identity:
+            raise RoutingError("metadata-changed")
     return catalog
 
 
@@ -475,6 +568,7 @@ def _hermes_database(root, budget):
     except ImportError:
         raise RoutingError("sqlite-readonly-unavailable") from None
     path = root / "state.db"
+    profile_identity = directory_identity(root)
     _sqlite_sidecars(path)
     catalog = []
     with regular_fd(path) as fd:
@@ -561,12 +655,15 @@ def _hermes_database(root, budget):
                     budget.consume(len(json.dumps(metadata).encode("utf-8")))
                     catalog.append(pointer(
                         "hermes", root, HERMES_TABLES[table][0], [table, identity],
+                        profile_identity=profile_identity,
                         nativeTable=table, nativeId=identity, schemaVersion=version,
                         metadata=metadata,
                     ))
             budget.check()
             _sqlite_sidecars(path)
             if stamp(os.fstat(fd)) != before or stamp(safe_stat(path)) != before:
+                raise RoutingError("metadata-changed")
+            if directory_identity(root) != profile_identity:
                 raise RoutingError("metadata-changed")
         except sqlite3.Error:
             budget.check()
@@ -580,6 +677,7 @@ def _hermes_database(root, budget):
 def _scout(roots, budget):
     catalog = []
     for root in roots:
+        profile_identity = directory_identity(root)
         data = read_json(root / "m-sessions" / "workspaces.json", budget)
         if (
             not isinstance(data, dict) or type(data.get("version")) is not int
@@ -593,9 +691,12 @@ def _scout(roots, budget):
             workspace_id = text(entry.get("id"))
             catalog.append(pointer(
                 "scout", root, "scout-workspace", workspace_id,
+                profile_identity=profile_identity,
                 nativeVersion=3, workspaceId=workspace_id,
                 providerId=text(entry.get("providerId")), rootId=text(entry.get("rootId")),
             ))
+        if directory_identity(root) != profile_identity:
+            raise RoutingError("metadata-changed")
     return catalog
 
 
@@ -607,12 +708,15 @@ def scan_provider(provider, profile_roots, *, previous=(), pending=None, limits=
         raise RoutingError("profile-count-bound")
     budget = Budget(limits)
     roots = sorted({absolute_path(root) for root in profile_roots}, key=str)
+    home_ancestors = directory_info(Path.home(), missing_ok=True)["ancestors"]
     for root in roots:
         budget.check()
-        if root == Path(root.anchor) or root == Path.home():
+        if directory_identity(root) in home_ancestors:
             raise RoutingError("broad-native-root-refused")
         with directory_fd(root):
             pass
+    roots = unique_directories(roots)
+    profile_identities = {str(root): directory_identity(root) for root in roots}
     for item in previous:
         validate_pointer(item)
         if item["provider"] != provider:
@@ -637,7 +741,8 @@ def scan_provider(provider, profile_roots, *, previous=(), pending=None, limits=
                 {
                     "provider": "grokbot", "profileRoot": str(root),
                     "state": "app-detected", "mapping": "workspace-mapping-unavailable",
-                    "observation_id": grokbot_observation_id(root),
+                    "observation_id": grokbot_observation_id(root, profile_identity=profile_identities[str(root)]),
+                    "observation_version": 2, "profileIdentity": profile_identities[str(root)],
                 }
                 for root in roots
             ]
@@ -653,9 +758,15 @@ def scan_provider(provider, profile_roots, *, previous=(), pending=None, limits=
     size = 0
     for item in candidates:
         budget.check()
+        if item["profileIdentity"] != profile_identities[item["profileRoot"]]:
+            raise RoutingError("metadata-changed")
         size += len(json.dumps(item, separators=(",", ":")).encode("utf-8"))
         if size > MAX_CATALOG_BYTES:
             raise RoutingError("catalog-size-bound")
     budget.check()
+    for root in roots:
+        if directory_identity(root) != profile_identities[str(root)]:
+            raise RoutingError("metadata-changed")
     result.update(provider=provider, profileRoots=list(map(str, roots)))
+    result["profileIdentities"] = profile_identities
     return result

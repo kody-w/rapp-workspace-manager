@@ -81,9 +81,14 @@ def absolute_path(value):
     if not isinstance(value, (str, os.PathLike)):
         raise RoutingError("invalid-path")
     text = os.fspath(value)
-    if not text or len(text) > 4096 or any(ord(c) < 32 for c in text):
+    if not isinstance(text, str) or not text or len(text) > 4096 or any(ord(c) < 32 for c in text):
         raise RoutingError("invalid-path")
-    path = Path(os.path.expanduser(text))
+    expanded = os.path.expanduser(text)
+    # POSIX permits implementation-defined "//" roots. This application accepts
+    # only the ordinary local root, never an alternate root namespace.
+    if expanded.startswith("/"):
+        expanded = "/" + expanded.lstrip("/")
+    path = Path(expanded)
     if ".." in path.parts or len(path.parts) > 128:
         raise RoutingError("path-traversal")
     return Path(os.path.abspath(path))
@@ -114,7 +119,7 @@ def io_error(error):
 
 
 @contextlib.contextmanager
-def directory_fd(path, create=False):
+def _walk_directory(path, create=False, missing_ok=False):
     path = absolute_path(path)
     if (
         not hasattr(os, "O_NOFOLLOW")
@@ -126,21 +131,119 @@ def directory_fd(path, create=False):
     fd = None
     try:
         fd = os.open(path.anchor, flags)
+        complete = True
         for part in path.parts[1:]:
             if create:
                 try:
                     os.mkdir(part, mode=0o700, dir_fd=fd)
                 except FileExistsError:
                     pass
-            child = os.open(part, flags, dir_fd=fd)
+            try:
+                child = os.open(part, flags, dir_fd=fd)
+            except FileNotFoundError:
+                if not missing_ok:
+                    raise
+                complete = False
+                break
             os.close(fd)
             fd = child
-        yield fd
+        yield fd, complete
     except OSError as error:
         raise io_error(error) from None
     finally:
         if fd is not None:
             os.close(fd)
+
+
+@contextlib.contextmanager
+def directory_fd(path, create=False):
+    with _walk_directory(path, create=create) as (fd, _):
+        yield fd
+
+
+def filesystem_identity(info):
+    return validate_filesystem_identity([info.st_dev, info.st_ino])
+
+
+def validate_filesystem_identity(value):
+    if (
+        not isinstance(value, list) or len(value) != 2
+        or type(value[0]) is not int or value[0] < 0
+        or type(value[1]) is not int or value[1] <= 0
+    ):
+        raise RoutingError("filesystem-identity-mismatch")
+    return value
+
+
+def directory_identity(path):
+    with directory_fd(path) as fd:
+        return filesystem_identity(os.fstat(fd))
+
+
+def _physical_ancestors(fd):
+    """Inspect kernel parent links of a pinned directory, not lexical prefixes."""
+    current = os.dup(fd)
+    ancestors = []
+    flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
+    try:
+        for _ in range(128):
+            identity = filesystem_identity(os.fstat(current))
+            if identity in ancestors:
+                raise RoutingError("filesystem-ancestry-cycle")
+            ancestors.append(identity)
+            parent = os.open("..", flags, dir_fd=current)
+            try:
+                parent_identity = filesystem_identity(os.fstat(parent))
+            except BaseException:
+                os.close(parent)
+                raise
+            if parent_identity == identity:
+                os.close(parent)
+                return ancestors
+            os.close(current)
+            current = parent
+        raise RoutingError("depth-bound")
+    finally:
+        os.close(current)
+
+
+def directory_info(path, missing_ok=False):
+    path = absolute_path(path)
+    with _walk_directory(path, missing_ok=missing_ok) as (fd, complete):
+        ancestors = _physical_ancestors(fd)
+        return {
+            "path": str(path),
+            "identity": ancestors[0] if complete else None,
+            "ancestors": ancestors,
+        }
+
+
+def same_directory(left, right):
+    a = directory_info(left, missing_ok=True)
+    b = directory_info(right, missing_ok=True)
+    return a["identity"] is not None and a["identity"] == b["identity"]
+
+
+def directories_overlap(left, right):
+    a = directory_info(left, missing_ok=True)
+    b = directory_info(right, missing_ok=True)
+    return (
+        a["identity"] is not None and a["identity"] in b["ancestors"]
+        or b["identity"] is not None and b["identity"] in a["ancestors"]
+    )
+
+
+def same_location(left, right):
+    a, b = absolute_path(left), absolute_path(right)
+    return a == b or same_directory(a, b)
+
+
+def unique_directories(paths):
+    found = {}
+    for path in map(absolute_path, paths):
+        key = tuple(directory_identity(path))
+        found.setdefault(key, path)
+    return list(found.values())
 
 
 @contextlib.contextmanager
@@ -152,8 +255,11 @@ def regular_fd(path):
             fd = os.open(
                 path.name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=parent
             )
-            if not stat.S_ISREG(os.fstat(fd).st_mode):
+            info = os.fstat(fd)
+            if not stat.S_ISREG(info.st_mode):
                 raise RoutingError("not-regular-metadata")
+            if info.st_nlink != 1:
+                raise RoutingError("hardlink-refused")
             yield fd
         except OSError as error:
             raise io_error(error) from None
@@ -175,6 +281,8 @@ def safe_stat(path, missing_ok=False):
             raise io_error(error) from None
         if stat.S_ISLNK(info.st_mode):
             raise RoutingError("symlink-refused")
+        if stat.S_ISREG(info.st_mode) and info.st_nlink != 1:
+            raise RoutingError("hardlink-refused")
         return info
 
 
@@ -249,7 +357,7 @@ def child_directories(path, budget):
 NATIVE_COMPONENTS = {".copilot", ".claude", ".hermes", ".scout", ".grokbot", ".grok"}
 
 
-def protected_local(path, profile_roots=()):
+def protected_local(path, profile_roots=(), *, candidate_info=None):
     path = absolute_path(path)
     lowered = [part.casefold() for part in path.parts]
     if any(part in NATIVE_COMPONENTS for part in lowered):
@@ -261,25 +369,43 @@ def protected_local(path, profile_roots=()):
         and any("grokbot" in part or part == "grok" or part.startswith("com.grok.") for part in lowered)
     ):
         return True
-    if path == Path(path.anchor) or path == Path.home():
+    candidate = candidate_info or directory_info(path, missing_ok=True)
+    home = directory_info(Path.home(), missing_ok=True)
+    if candidate["identity"] is not None and candidate["identity"] in home["ancestors"]:
         return True
-    return any(
-        path == root or root in path.parents or path in root.parents
-        for root in map(absolute_path, profile_roots)
-    )
+    for value in profile_roots:
+        root = value["path"] if isinstance(value, dict) else value
+        saved_identity = value.get("identity") if isinstance(value, dict) else None
+        if saved_identity is not None:
+            validate_filesystem_identity(saved_identity)
+            if saved_identity in candidate["ancestors"]:
+                return True
+        protected = directory_info(root, missing_ok=True)
+        if (
+            protected["identity"] is not None and protected["identity"] in candidate["ancestors"]
+            or candidate["identity"] is not None and candidate["identity"] in protected["ancestors"]
+        ):
+            return True
+    return False
 
 
-def verified_directory(value, profile_roots=()):
+def verified_directory_info(value, profile_roots=(), expected_identity=None):
     path = native_path(value)
     if path is None:
         return None
-    if protected_local(path, profile_roots):
-        return None
     try:
-        with directory_fd(path):
-            return str(path)
+        info = directory_info(path)
+        if expected_identity is not None and info["identity"] != expected_identity:
+            return None
+        if not protected_local(path, profile_roots, candidate_info=info):
+            return info
     except RoutingError:
         return None
+
+
+def verified_directory(value, profile_roots=(), expected_identity=None):
+    info = verified_directory_info(value, profile_roots, expected_identity)
+    return info["path"] if info is not None else None
 
 
 def ensure_output(path):
@@ -328,15 +454,21 @@ def manager_lock(workspace):
         import fcntl
     except ImportError:
         raise RoutingError("safe-io-unavailable") from None
+    existing = safe_stat(absolute_path(workspace) / ".routing.lock", missing_ok=True)
+    if existing is not None and not stat.S_ISREG(existing.st_mode):
+        raise RoutingError("unsafe-manager-output")
     with directory_fd(workspace) as parent:
         fd = None
         try:
             fd = os.open(
-                ".routing.lock", os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW | os.O_NONBLOCK,
+                ".routing.lock", os.O_RDONLY | os.O_CREAT | os.O_NOFOLLOW | os.O_NONBLOCK,
                 0o600, dir_fd=parent,
             )
-            if not stat.S_ISREG(os.fstat(fd).st_mode):
+            info = os.fstat(fd)
+            if not stat.S_ISREG(info.st_mode):
                 raise RoutingError("unsafe-manager-output")
+            if info.st_nlink != 1:
+                raise RoutingError("hardlink-refused")
             fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
             yield
         except OSError as error:

@@ -681,6 +681,8 @@ class FederationTests(unittest.TestCase):
         example = json.loads((examples / "native/grokbot/observation.json").read_text())
         example["profileRoot"] = str(app)
         example["observation_id"] = native.grokbot_observation_id(app)
+        example["observation_version"] = 2
+        example["profileIdentity"] = routing_io.directory_identity(app)
         self.assertEqual(result["observations"], [example])
 
     def test_registry_size_bound_keeps_provider_last_good_with_stale_error(self):
