@@ -11,6 +11,7 @@ Git history, identity, world boundary, instructions, tests, and RAPP/1 frames.
 
 ```text
 RAPP Workspace Manager
+RAPP Global Estate
 Copilot Builder — RAPP Work
 Microsoft CEO
 LLC Autofile
@@ -57,7 +58,8 @@ The current private proof uses:
 
 `~/rapp-work/RAPP-Work-Local-Estate.code-workspace`
 
-It contains the manager first and eleven selected sibling roots. That file is
+It contains the manager first and twelve selected sibling roots: the default
+RAPP Global Estate world plus eleven local project roots. That file is
 machine-local evidence, not public registry authority. Real absolute paths and
 private estate membership are not committed here.
 
@@ -83,6 +85,7 @@ every project is already RAPP/1 conformant.
 | Workspace | Current frame | Proposed next frame |
 |---|---|---|
 | **RAPP Workspace Manager** | Pointer-first routing manager; generated dashboard is a projection. | Add exact-root registration and deterministic manager-first VS Code generation with pointer-only Clear. |
+| **RAPP Global Estate** | `ESTATE_MAP.md` preserves a historical 92-repository observation; current `estate-map.json` is a derived spine projection, not authenticated registry authority. | Reconcile the historical observation with a current bounded spine refresh and publish an evidence-labeled drift brief without turning observation into owner acceptance. |
 | **Copilot Builder — RAPP Work** | Active bridge worktree for operating a root bot through Copilot CLI. | Add a CI-enforced canonical bot-bridge acceptance suite covering identity, replay, restart, evidence, visibility, and zero model/guest effects for reporting. |
 | **Microsoft CEO** | 105 RAPP project streams verify, but navigation projections are stale. | Close the authority-to-projection freshness loop so indexes and cockpit views derive from verified stream heads after appends. |
 | **LLC Autofile** | Private local evidence filer with append-only reviewed receipts. | Separate repository-safe synthetic validation from explicitly authorized owner-local registry checks. |
