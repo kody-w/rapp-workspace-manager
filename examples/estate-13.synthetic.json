@@ -1,0 +1,18 @@
+{
+  "description": "Synthetic pointer selection only; create no repositories inside the manager.",
+  "roots": [
+    {"name": "RAPP Workspace Manager", "relativePath": "manager"},
+    {"name": "RAPP Global Estate", "relativePath": "RAPP Global Estate"},
+    {"name": "Project 01", "relativePath": "Project 01"},
+    {"name": "Project 02", "relativePath": "Project 02"},
+    {"name": "Project 03", "relativePath": "Project 03"},
+    {"name": "Project 04", "relativePath": "Project 04"},
+    {"name": "Project 05", "relativePath": "Project 05"},
+    {"name": "Project 06", "relativePath": "Project 06"},
+    {"name": "Project 07", "relativePath": "Project 07"},
+    {"name": "Project 08", "relativePath": "Project 08"},
+    {"name": "Project 09", "relativePath": "Project 09"},
+    {"name": "Project 10", "relativePath": "Project 10"},
+    {"name": "Project 11", "relativePath": "Project 11"}
+  ]
+}

@@ -21,3 +21,8 @@ Open `rapp-work-concept-lab.html` and switch between:
 The UI is intentionally deferred. These frames exist only so the user can
 react to possible passive projections after the headless collaboration is
 proven.
+
+All names, counts and dialogue are synthetic. The buttons are local UI
+demonstrations, not provider APIs or evidence that any live mutation happened.
+The headless manager now implements exact-root selection and native metadata
+catalogs; these mockups do not connect to those APIs or expose a real roster.

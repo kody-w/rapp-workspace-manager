@@ -1,9 +1,9 @@
 import importlib.util
 import json
-import tempfile
 import unittest
 from pathlib import Path
 
+from support import fixture_directory
 
 MODULE_PATH = Path(__file__).parents[1] / "tools" / "workspace_manager.py"
 SPEC = importlib.util.spec_from_file_location("workspace_manager", MODULE_PATH)
@@ -19,7 +19,7 @@ class FakeRapp:
 
 class WorkspaceManagerTests(unittest.TestCase):
     def test_discovers_nested_git_roots_without_copying_content(self):
-        with tempfile.TemporaryDirectory() as tmp:
+        with fixture_directory() as tmp:
             root = Path(tmp)
             plain = root / "plain"
             nested = plain / "nested"
@@ -59,7 +59,7 @@ class WorkspaceManagerTests(unittest.TestCase):
             self.assertEqual(rapp_pointer["world_id"], "test-world")
 
     def test_rejects_symlinked_or_invalid_rapp_identity(self):
-        with tempfile.TemporaryDirectory() as tmp:
+        with fixture_directory() as tmp:
             root = Path(tmp)
             outside = root / "outside.json"
             outside.write_text(
@@ -98,7 +98,7 @@ class WorkspaceManagerTests(unittest.TestCase):
             "workspaces": [
                 {
                     "name": "alpha",
-                    "path": "/tmp/alpha",
+                    "path": "/home/example/alpha",
                     "kind": "git",
                     "mode": None,
                     "tags": [],
@@ -107,7 +107,7 @@ class WorkspaceManagerTests(unittest.TestCase):
         }
         home = workspace_manager.render_home(identity, registry)
         self.assertIn("PRIVATE / NEVER PUBLISH", home)
-        self.assertIn("/tmp/alpha", home)
+        self.assertIn("/home/example/alpha", home)
         self.assertIn("pointers only", home)
 
 

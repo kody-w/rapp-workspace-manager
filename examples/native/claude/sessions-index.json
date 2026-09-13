@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "originalPath": "/home/example/work/alpha-beta",
+  "entries": [
+    {
+      "sessionId": "00000000-0000-4000-8000-000000000001",
+      "projectPath": "/home/example/work/alpha-beta"
+    },
+    {
+      "sessionId": "00000000-0000-4000-8000-000000000002",
+      "originalPath": "/home/example/work/alpha/beta",
+      "projectPath": "/home/example/work/alpha/beta"
+    }
+  ]
+}
