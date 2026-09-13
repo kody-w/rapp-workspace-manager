@@ -1,0 +1,482 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>RAPP Work Concept Lab</title>
+  <script>
+    (() => {
+      const param = new URLSearchParams(window.location.search).get("scoutTheme");
+      const theme =
+        param || (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+      document.documentElement.setAttribute("data-theme", theme);
+    })();
+  </script>
+  <style>
+    :root {
+      color-scheme: light;
+      --cp-bg: #f7f4ef;
+      --cp-bg-elevated: #fcfbf8;
+      --cp-surface: #ffffff;
+      --cp-surface-soft: #f5f5f5;
+      --cp-border: #dedede;
+      --cp-border-strong: #919191;
+      --cp-text: #242424;
+      --cp-text-muted: #5c5c5c;
+      --cp-text-soft: #6f6f6f;
+      --cp-accent: #b11f4b;
+      --cp-accent-hover: #9a1a41;
+      --cp-accent-soft: rgba(177, 31, 75, 0.08);
+      --cp-accent-fg: #ffffff;
+      --cp-success: #16a34a;
+      --cp-danger: #dc2626;
+      --cp-warning: #f59e0b;
+      --cp-link: #0078d4;
+      --cp-shadow: 0 18px 48px rgba(0, 0, 0, 0.12);
+      --cp-overlay: rgba(255, 255, 255, 0.8);
+      --cp-panel: rgba(255, 255, 255, 0.86);
+      --cp-panel-strong: rgba(255, 255, 255, 0.96);
+      --cp-sheen: rgba(255, 255, 255, 0.55);
+      --cp-highlight: rgba(177, 31, 75, 0.12);
+    }
+    html[data-theme="dark"] {
+      color-scheme: dark;
+      --cp-bg: #3d3b3a;
+      --cp-bg-elevated: #343231;
+      --cp-surface: #292929;
+      --cp-surface-soft: #2e2e2e;
+      --cp-border: #474747;
+      --cp-border-strong: #5f5f5f;
+      --cp-text: #dedede;
+      --cp-text-muted: #919191;
+      --cp-text-soft: #b0b0b0;
+      --cp-accent: #fd8ea1;
+      --cp-accent-hover: #fb7b91;
+      --cp-accent-soft: rgba(253, 142, 161, 0.14);
+      --cp-accent-fg: #1a1a1a;
+      --cp-success: #4ade80;
+      --cp-danger: #f87171;
+      --cp-warning: #fbbf24;
+      --cp-link: #4da6ff;
+      --cp-shadow: 0 18px 48px rgba(0, 0, 0, 0.32);
+      --cp-overlay: rgba(41, 41, 41, 0.88);
+      --cp-panel: rgba(41, 41, 41, 0.72);
+      --cp-panel-strong: rgba(41, 41, 41, 0.96);
+      --cp-sheen: rgba(255, 255, 255, 0.04);
+      --cp-highlight: rgba(253, 142, 161, 0.12);
+    }
+    * { box-sizing: border-box; }
+    html, body { min-height: 100%; margin: 0; }
+    body {
+      background: var(--cp-bg);
+      color: var(--cp-text);
+      font-family: "Segoe UI", Aptos, Calibri, -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+    button, textarea, input { font: inherit; }
+    button { color: inherit; }
+    button:focus-visible, textarea:focus-visible {
+      outline: 3px solid var(--cp-accent);
+      outline-offset: 2px;
+    }
+    .app { min-height: 100vh; display: grid; grid-template-rows: auto 1fr; }
+    .lab-header {
+      display: flex; align-items: center; justify-content: space-between; gap: 16px;
+      padding: 12px 20px; background: var(--cp-bg-elevated); border-bottom: 1px solid var(--cp-border);
+    }
+    .brand { display: flex; align-items: center; gap: 12px; min-width: 0; }
+    .brand-mark, .bot-mark {
+      display: grid; place-items: center; flex: 0 0 auto; font-weight: 800;
+      background: var(--cp-accent); color: var(--cp-accent-fg);
+    }
+    .brand-mark { width: 36px; height: 36px; border-radius: 10px; }
+    .bot-mark { width: 38px; height: 38px; border-radius: 50%; }
+    .brand strong { display: block; }
+    .brand small { color: var(--cp-text-muted); display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .concept-tabs {
+      display: flex; gap: 4px; padding: 4px; border: 1px solid var(--cp-border);
+      background: var(--cp-surface); border-radius: 0.625rem;
+    }
+    .concept-tabs button {
+      border: 0; background: transparent; padding: 8px 12px; border-radius: 0.625rem; cursor: pointer;
+      color: var(--cp-text-muted);
+    }
+    .concept-tabs button[aria-selected="true"] {
+      background: var(--cp-accent-soft); color: var(--cp-accent); font-weight: 700;
+    }
+    .stage { min-height: 0; }
+    .concept { display: none; height: calc(100vh - 61px); }
+    .concept.active { display: grid; }
+    .surface {
+      background: var(--cp-surface); border: 1px solid var(--cp-border); border-radius: 16px;
+      box-shadow: 0 0 0 1px var(--cp-sheen); overflow: hidden;
+    }
+    .muted { color: var(--cp-text-muted); }
+    .soft { color: var(--cp-text-soft); }
+    .eyebrow { font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--cp-text-muted); font-weight: 700; }
+    .status-dot { width: 8px; height: 8px; background: var(--cp-success); border-radius: 50%; display: inline-block; }
+    .pill {
+      display: inline-flex; align-items: center; gap: 6px; padding: 6px 9px;
+      background: var(--cp-surface-soft); border: 1px solid var(--cp-border); border-radius: 999px;
+      color: var(--cp-text-muted); font-size: 12px;
+    }
+    .primary {
+      border: 1px solid var(--cp-accent); background: var(--cp-accent); color: var(--cp-accent-fg);
+      border-radius: 0.625rem; padding: 10px 14px; cursor: pointer; font-weight: 700;
+    }
+    .primary:hover { background: var(--cp-accent-hover); }
+    .secondary {
+      border: 1px solid var(--cp-border); background: var(--cp-surface); color: var(--cp-text);
+      border-radius: 0.625rem; padding: 9px 12px; cursor: pointer;
+    }
+    .icon-button {
+      width: 38px; height: 38px; display: grid; place-items: center; border-radius: 50%;
+      border: 1px solid var(--cp-border); background: var(--cp-surface); cursor: pointer;
+    }
+    svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+
+    /* Concept A */
+    #concept-a { grid-template-columns: 230px minmax(0, 1fr); background: var(--cp-bg); }
+    .bot-list { padding: 16px; border-right: 1px solid var(--cp-border); background: var(--cp-bg-elevated); overflow: auto; }
+    .bot-list h2 { font-size: 14px; margin: 20px 4px 10px; }
+    .bot-entry {
+      width: 100%; display: grid; grid-template-columns: auto 1fr; gap: 10px; text-align: left;
+      border: 1px solid transparent; background: transparent; padding: 10px; border-radius: 0.625rem; cursor: pointer;
+    }
+    .bot-entry.active { background: var(--cp-accent-soft); border-color: var(--cp-border); }
+    .bot-entry strong, .bot-entry small { display: block; }
+    .bot-entry small { color: var(--cp-text-muted); margin-top: 2px; }
+    .conversation { display: grid; grid-template-rows: auto 1fr auto; min-width: 0; background: var(--cp-surface); }
+    .conversation-header { display: flex; justify-content: space-between; align-items: center; padding: 14px 20px; border-bottom: 1px solid var(--cp-border); }
+    .conversation-title { display: flex; align-items: center; gap: 12px; }
+    .conversation-title h1 { font-size: 18px; margin: 0; }
+    .conversation-title p { margin: 2px 0 0; font-size: 12px; color: var(--cp-text-muted); }
+    .messages { padding: 24px max(24px, calc((100% - 760px) / 2)); overflow: auto; }
+    .message { margin: 0 0 18px; max-width: 680px; }
+    .message.user { margin-left: auto; }
+    .message-label { font-size: 12px; color: var(--cp-text-muted); margin: 0 0 6px; }
+    .bubble {
+      padding: 14px 16px; border: 1px solid var(--cp-border); border-radius: 16px;
+      background: var(--cp-surface-soft); line-height: 1.5;
+    }
+    .user .bubble { background: var(--cp-accent-soft); }
+    .decision-card {
+      margin-top: 10px; padding: 12px; border-left: 3px solid var(--cp-accent);
+      background: var(--cp-bg-elevated); border-radius: 0.625rem;
+    }
+    .decision-actions { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+    .composer { margin: 12px max(16px, calc((100% - 800px) / 2)) 16px; border: 1px solid var(--cp-border-strong); border-radius: 16px; padding: 10px; }
+    .composer textarea { width: 100%; min-height: 52px; resize: none; border: 0; background: transparent; color: var(--cp-text); padding: 6px; }
+    .composer-row { display: flex; justify-content: space-between; align-items: center; }
+
+    /* Concept B */
+    #concept-b {
+      place-items: center; padding: 24px; overflow: auto;
+      background: var(--cp-bg);
+    }
+    .thought-canvas { width: min(1080px, 100%); min-height: 680px; padding: 22px; position: relative; display: grid; grid-template-rows: auto 1fr auto; gap: 20px; }
+    .canvas-top { display: flex; justify-content: space-between; align-items: center; }
+    .canvas-core { display: grid; place-items: center; position: relative; min-height: 470px; }
+    .thought-orb {
+      width: min(620px, 90%); padding: 28px; text-align: center; border: 1px solid var(--cp-border-strong);
+      background: var(--cp-bg-elevated); border-radius: 16px; z-index: 2;
+    }
+    .thought-orb h1 { font-size: clamp(26px, 5vw, 52px); margin: 0 0 14px; letter-spacing: -0.03em; }
+    .thought-orb p { color: var(--cp-text-muted); line-height: 1.5; }
+    .thought-input { display: flex; align-items: center; gap: 8px; margin-top: 20px; }
+    .thought-input textarea { flex: 1; min-height: 54px; border: 1px solid var(--cp-border); border-radius: 0.625rem; background: var(--cp-surface); color: var(--cp-text); padding: 14px; resize: none; }
+    .floating-card {
+      position: absolute; width: 230px; padding: 13px; border: 1px solid var(--cp-border);
+      border-radius: 16px; background: var(--cp-panel-strong); box-shadow: 0 0 0 1px var(--cp-sheen);
+      font-size: 13px;
+    }
+    .floating-card strong { display: block; margin-bottom: 4px; }
+    .fc-one { top: 30px; left: 18px; }
+    .fc-two { top: 55px; right: 18px; }
+    .fc-three { bottom: 34px; left: 46px; }
+    .fc-four { bottom: 20px; right: 42px; }
+    .recommendation {
+      display: none; width: min(760px, 92%); z-index: 3; padding: 22px;
+      background: var(--cp-panel-strong); border: 1px solid var(--cp-border-strong); border-radius: 16px;
+    }
+    .recommendation.visible { display: block; }
+    .tradeoff-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 14px; }
+    .tradeoff { padding: 12px; border: 1px solid var(--cp-border); border-radius: 0.625rem; background: var(--cp-surface); }
+    .tradeoff.selected { border-color: var(--cp-accent); background: var(--cp-accent-soft); }
+    .canvas-footer { text-align: center; color: var(--cp-text-muted); font-size: 12px; }
+
+    /* Concept C */
+    #concept-c { grid-template-columns: minmax(0, 1fr) 300px; background: var(--cp-bg); }
+    .transcript { display: grid; grid-template-rows: auto 1fr auto; min-width: 0; }
+    .transcript-header { padding: 16px 22px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--cp-border); background: var(--cp-bg-elevated); }
+    .turns { overflow: auto; padding: 24px max(20px, calc((100% - 760px) / 2)); }
+    .turn { display: grid; grid-template-columns: 42px 1fr; gap: 12px; margin-bottom: 18px; }
+    .turn-content { padding: 14px 16px; border: 1px solid var(--cp-border); border-radius: 16px; background: var(--cp-surface); line-height: 1.5; }
+    .turn-head { display: flex; justify-content: space-between; gap: 12px; margin-bottom: 6px; }
+    .turn-head span { color: var(--cp-text-muted); font-size: 12px; }
+    .synthesis .turn-content { border-color: var(--cp-accent); background: var(--cp-accent-soft); }
+    .evidence-rail { border-left: 1px solid var(--cp-border); background: var(--cp-bg-elevated); padding: 18px; overflow: auto; }
+    .evidence-rail h2 { font-size: 15px; }
+    .evidence-item { padding: 10px 0; border-bottom: 1px solid var(--cp-border); font-size: 13px; }
+    .evidence-item strong { display: block; }
+    .stream-composer { padding: 12px 20px; border-top: 1px solid var(--cp-border); display: flex; gap: 8px; }
+    .stream-composer input { flex: 1; border: 1px solid var(--cp-border); background: var(--cp-surface); color: var(--cp-text); padding: 12px; border-radius: 0.625rem; }
+    .playing { color: var(--cp-accent); }
+    .concept-note {
+      position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); z-index: 20;
+      background: var(--cp-panel-strong); border: 1px solid var(--cp-border); border-radius: 999px;
+      padding: 8px 14px; color: var(--cp-text-muted); font-size: 12px; box-shadow: var(--cp-shadow);
+    }
+    @media (max-width: 760px) {
+      .lab-header { align-items: flex-start; flex-direction: column; }
+      .concept-tabs { width: 100%; overflow-x: auto; }
+      .concept { height: calc(100vh - 112px); }
+      #concept-a { grid-template-columns: 1fr; }
+      .bot-list { display: none; }
+      #concept-c { grid-template-columns: 1fr; }
+      .evidence-rail { display: none; }
+      .floating-card { position: static; width: 100%; margin: 6px 0; }
+      .canvas-core { display: flex; flex-direction: column; }
+      .tradeoff-grid { grid-template-columns: 1fr; }
+      .thought-canvas { min-height: auto; }
+      .thought-orb { width: 100%; }
+      .concept-note { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header class="lab-header">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">RW</div>
+        <div><strong>RAPP Work Concept Lab</strong><small>Three passive frames around one autonomous collaboration</small></div>
+      </div>
+      <div class="concept-tabs" role="tablist" aria-label="Design concepts">
+        <button id="tab-a" role="tab" aria-selected="true" aria-controls="concept-a">A · Conversation</button>
+        <button id="tab-b" role="tab" aria-selected="false" aria-controls="concept-b">B · Thought Canvas</button>
+        <button id="tab-c" role="tab" aria-selected="false" aria-controls="concept-c">C · Living Transcript</button>
+      </div>
+    </header>
+    <main class="stage">
+      <section id="concept-a" class="concept active" role="tabpanel" aria-labelledby="tab-a">
+        <aside class="bot-list">
+          <span class="eyebrow">Your RAPPbots</span>
+          <h2>Working now</h2>
+          <button class="bot-entry active">
+            <span class="bot-mark">C</span><span><strong>Copilot Builder</strong><small>Building RAPP Work</small></span>
+          </button>
+          <button class="bot-entry">
+            <span class="bot-mark">E</span><span><strong>Estate Librarian</strong><small>Organizing local work</small></span>
+          </button>
+          <h2>Quiet</h2>
+          <button class="bot-entry">
+            <span class="bot-mark">N</span><span><strong>Nexus World</strong><small>Waiting for a thought</small></span>
+          </button>
+        </aside>
+        <div class="conversation">
+          <header class="conversation-header">
+            <div class="conversation-title">
+              <span class="bot-mark">C</span>
+              <div><h1>Copilot Builder</h1><p><span class="status-dot"></span> with you · everything else is behind the scenes</p></div>
+            </div>
+            <button class="icon-button resume-a" aria-label="Where were we?">
+              <svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v6h6"/></svg>
+            </button>
+          </header>
+          <div class="messages" aria-live="polite">
+            <article class="message user">
+              <div class="message-label">You</div>
+              <div class="bubble">Put my local projects beside the workspace manager so I can see the whole estate.</div>
+            </article>
+            <article class="message">
+              <div class="message-label">Copilot Builder</div>
+              <div class="bubble">
+                I found two viable shapes. Nesting the repositories would simplify one path but damage Git and world boundaries. A generated multi-root view keeps every project independent while making the estate feel unified.
+                <div class="decision-card">
+                  <strong>Recommendation: manager first, projects as sibling roots.</strong>
+                  <div class="muted">Clear removes only a pointer. No project files move or disappear.</div>
+                  <div class="decision-actions">
+                    <button class="primary apply-a">Use this shape</button>
+                    <button class="secondary">Talk through another option</button>
+                  </div>
+                </div>
+              </div>
+            </article>
+          </div>
+          <div class="composer">
+            <textarea aria-label="Message Copilot Builder" placeholder="Say what you are thinking…"></textarea>
+            <div class="composer-row">
+              <button class="icon-button voice-a" aria-label="Speak to Copilot Builder">
+                <svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
+              </button>
+              <button class="primary send-a">Send</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="concept-b" class="concept" role="tabpanel" aria-labelledby="tab-b">
+        <div class="thought-canvas surface">
+          <div class="canvas-top">
+            <div><span class="eyebrow">Thought-first</span><strong style="display:block">No navigation. No setup.</strong></div>
+            <span class="pill"><span class="status-dot"></span> Estate understood</span>
+          </div>
+          <div class="canvas-core">
+            <div class="floating-card fc-one"><strong>12 local roots</strong><span class="muted">Independent and available</span></div>
+            <div class="floating-card fc-two"><strong>3 decisions waiting</strong><span class="muted">Nothing applied without you</span></div>
+            <div class="floating-card fc-three"><strong>Microsoft CEO</strong><span class="muted">Projection is stale; authority is healthy</span></div>
+            <div class="floating-card fc-four"><strong>Copilot Builder</strong><span class="muted">4 implementation tracks active</span></div>
+            <div class="thought-orb">
+              <span class="eyebrow">What are you thinking?</span>
+              <h1>Start with the thought.</h1>
+              <p>Copilot reconstructs the relevant estate, explains the tradeoffs, and carries the idea forward.</p>
+              <div class="thought-input">
+                <textarea id="thought-b" aria-label="Describe a thought">I want my work to feel organized without moving any projects.</textarea>
+                <button class="icon-button voice-b" aria-label="Speak your thought">
+                  <svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
+                </button>
+                <button class="primary dream-b">Think with me</button>
+              </div>
+            </div>
+            <div class="recommendation" id="recommendation-b">
+              <span class="eyebrow">Copilot’s recommendation</span>
+              <h2>Keep projects independent. Generate the organization around them.</h2>
+              <p class="muted">The best balance is a pointer-owned estate view: fast to reorganize, safe to clear, and compatible with each project’s own RAPP/1 authority.</p>
+              <div class="tradeoff-grid">
+                <button class="tradeoff selected"><strong>Sibling roots</strong><br><span class="muted">Best isolation and clarity</span></button>
+                <button class="tradeoff"><strong>Nested projects</strong><br><span class="muted">Simple path, unsafe boundaries</span></button>
+                <button class="tradeoff"><strong>Dashboard only</strong><br><span class="muted">Safe, less immediate</span></button>
+              </div>
+              <div class="decision-actions">
+                <button class="primary apply-b">Make it so</button>
+                <button class="secondary reset-b">Keep thinking</button>
+              </div>
+            </div>
+          </div>
+          <div class="canvas-footer">The surrounding cards are live context—not controls the user must manage.</div>
+        </div>
+      </section>
+
+      <section id="concept-c" class="concept" role="tabpanel" aria-labelledby="tab-c">
+        <div class="transcript">
+          <header class="transcript-header">
+            <div><span class="eyebrow">One conversation · several perspectives</span><strong style="display:block">Copilot Builder</strong></div>
+            <button class="secondary play-c">Speak summary</button>
+          </header>
+          <div class="turns" aria-live="polite">
+            <article class="turn">
+              <span class="bot-mark">Y</span>
+              <div class="turn-content"><div class="turn-head"><strong>You</strong><span>13:51</span></div>Should the projects live inside the manager, or stay beside it?</div>
+            </article>
+            <article class="turn">
+              <span class="bot-mark">E</span>
+              <div class="turn-content"><div class="turn-head"><strong>Estate Librarian</strong><span>evidence perspective</span></div>The current pointer registry is designed to route independent roots. Physical nesting would create ambiguous Git and world boundaries.</div>
+            </article>
+            <article class="turn">
+              <span class="bot-mark">R</span>
+              <div class="turn-content"><div class="turn-head"><strong>RAPP Authority</strong><span>protocol perspective</span></div>Source-owned frames should remain authoritative. A generated editor view can be discarded and rebuilt without changing project history.</div>
+            </article>
+            <article class="turn synthesis">
+              <span class="bot-mark">C</span>
+              <div class="turn-content">
+                <div class="turn-head"><strong>Copilot Builder</strong><span>grounded synthesis</span></div>
+                Keep them beside the manager. The manager owns pointers and views; each project keeps its identity. I can generate the shape you want and clear it later without deleting anything.
+                <div class="decision-actions"><button class="primary apply-c">Apply recommendation</button><button class="secondary">Ask a follow-up</button></div>
+              </div>
+            </article>
+          </div>
+          <div class="stream-composer">
+            <input aria-label="Continue the conversation" placeholder="Continue the thought…">
+            <button class="icon-button voice-c" aria-label="Speak">
+              <svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
+            </button>
+            <button class="primary send-c">Send</button>
+          </div>
+        </div>
+        <aside class="evidence-rail">
+          <span class="eyebrow">What informed this</span>
+          <h2>Evidence, not settings</h2>
+          <div class="evidence-item"><strong>Workspace Manager</strong><span class="muted">Pointer-only registry</span></div>
+          <div class="evidence-item"><strong>12-root proof</strong><span class="muted">Manager first, 11 siblings</span></div>
+          <div class="evidence-item"><strong>RAPP/1 boundary</strong><span class="muted">Project frames remain source authority</span></div>
+          <div class="evidence-item"><strong>Tradeoff</strong><span class="muted">Unified visibility without nested ownership</span></div>
+          <div class="evidence-item"><strong>Action scope</strong><span class="muted">View file only · reversible</span></div>
+        </aside>
+      </section>
+    </main>
+    <div class="concept-note" id="concept-note">A · Familiar chat. Lowest cognitive transition.</div>
+  </div>
+  <script>
+    const tabs = [...document.querySelectorAll('[role="tab"]')];
+    const concepts = [...document.querySelectorAll('.concept')];
+    const notes = {
+      "concept-a": "A · Familiar chat. Lowest cognitive transition.",
+      "concept-b": "B · Thought canvas. Strongest expression of the product idea.",
+      "concept-c": "C · Living transcript. Best for multi-bot evidence and collaboration."
+    };
+    function activate(id) {
+      tabs.forEach((tab) => tab.setAttribute("aria-selected", String(tab.getAttribute("aria-controls") === id)));
+      concepts.forEach((concept) => concept.classList.toggle("active", concept.id === id));
+      document.getElementById("concept-note").textContent = notes[id];
+    }
+    tabs.forEach((tab) => {
+      tab.addEventListener("click", () => activate(tab.getAttribute("aria-controls")));
+      tab.addEventListener("keydown", (event) => {
+        const index = tabs.indexOf(tab);
+        if (event.key === "ArrowRight") { event.preventDefault(); tabs[(index + 1) % tabs.length].focus(); tabs[(index + 1) % tabs.length].click(); }
+        if (event.key === "ArrowLeft") { event.preventDefault(); tabs[(index - 1 + tabs.length) % tabs.length].focus(); tabs[(index - 1 + tabs.length) % tabs.length].click(); }
+      });
+    });
+    function addStatus(button, text) {
+      const original = button.textContent;
+      button.textContent = text;
+      button.disabled = true;
+      setTimeout(() => { button.textContent = original; button.disabled = false; }, 1200);
+    }
+    document.querySelector(".send-a").addEventListener("click", function () {
+      const text = document.querySelector(".composer textarea").value.trim();
+      if (!text) return;
+      const article = document.createElement("article");
+      article.className = "message user";
+      article.innerHTML = `<div class="message-label">You</div><div class="bubble"></div>`;
+      article.querySelector(".bubble").textContent = text;
+      document.querySelector(".messages").append(article);
+      document.querySelector(".composer textarea").value = "";
+      article.scrollIntoView({ behavior: "smooth" });
+    });
+    document.querySelector(".resume-a").addEventListener("click", function () {
+      addStatus(this, "✓");
+      document.querySelector(".messages").scrollTo({ top: 0, behavior: "smooth" });
+    });
+    document.querySelector(".apply-a").addEventListener("click", function () { addStatus(this, "Applied"); });
+    document.querySelector(".voice-a").addEventListener("click", function () { addStatus(this, "●"); });
+    document.querySelector(".voice-b").addEventListener("click", function () { addStatus(this, "●"); });
+    document.querySelector(".voice-c").addEventListener("click", function () { addStatus(this, "●"); });
+    document.querySelector(".dream-b").addEventListener("click", () => {
+      document.querySelector(".thought-orb").style.display = "none";
+      document.getElementById("recommendation-b").classList.add("visible");
+    });
+    document.querySelector(".reset-b").addEventListener("click", () => {
+      document.querySelector(".thought-orb").style.display = "block";
+      document.getElementById("recommendation-b").classList.remove("visible");
+    });
+    document.querySelectorAll(".tradeoff").forEach((button) => button.addEventListener("click", () => {
+      document.querySelectorAll(".tradeoff").forEach((item) => item.classList.remove("selected"));
+      button.classList.add("selected");
+    }));
+    document.querySelector(".apply-b").addEventListener("click", function () { addStatus(this, "Applied"); });
+    document.querySelector(".apply-c").addEventListener("click", function () { addStatus(this, "Applied"); });
+    document.querySelector(".play-c").addEventListener("click", function () {
+      this.classList.toggle("playing");
+      this.textContent = this.classList.contains("playing") ? "Speaking…" : "Speak summary";
+    });
+    document.querySelector(".send-c").addEventListener("click", function () {
+      const input = document.querySelector(".stream-composer input");
+      if (!input.value.trim()) return;
+      input.value = "";
+      addStatus(this, "Sent");
+    });
+    const requestedConcept = new URLSearchParams(window.location.search).get("concept");
+    if (["a", "b", "c"].includes(requestedConcept)) activate(`concept-${requestedConcept}`);
+  </script>
+</body>
+</html>
