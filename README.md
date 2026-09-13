@@ -252,6 +252,10 @@ Different saved device/inode identities are never aliases, even at the same
 spelling: their original suppressions remain intact and selection requires
 explicit re-add. Ambiguous v1 suppression stays stale with
 `native-identity-ambiguous` rather than being guessed or discarded.
+Migration planning checks the complete candidate/observation set against
+immutable original selection and suppression sets before applying changes.
+Competing target claims are refused, and catalog ordering cannot consume a
+tombstone before another candidate proves it ambiguous.
 Cached Copilot metadata is rebound to the current verified locator without
 changing its stable pointer identity. Historical protection follows remembered
 objects through verified current locators; inaccessible, symlinked or reused

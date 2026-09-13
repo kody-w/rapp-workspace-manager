@@ -560,6 +560,8 @@ def native_address(item):
 
 def remap_native_identities(state, result):
     """Carry selection/suppression across proven aliases and v1 key upgrades."""
+    original_selected = frozenset(state["selected"])
+    original_forgotten = frozenset(state["forgotten"])
     history = list(state["profileHistory"])
     history.extend({
         "path": root, "identity": state["profileIdentities"].get(root),
@@ -602,7 +604,7 @@ def remap_native_identities(state, result):
             elif same_object or legacy_location:
                 equivalents.add(value["path"])
         aliases[root], ambiguous_legacy[root] = equivalents, uncertain
-    selected, forgotten = set(state["selected"]), set(state["forgotten"])
+    plan, claims, ambiguous_sources = [], {}, set()
     for item in result["catalog"] + result["observations"]:
         kind, identity, key = native_address(item)
         # A v2 alias already has this exact filesystem-bound key. Never add a
@@ -616,15 +618,32 @@ def remap_native_identities(state, result):
             native_ai.legacy_pointer_id(result["provider"], path, kind, identity)
             for path in ambiguous_legacy[item["profileRoot"]]
         }
-        if ambiguous & forgotten:
-            raise RoutingError("native-identity-ambiguous")
-        if forgotten & keys:
-            forgotten.difference_update(keys)
-            forgotten.add(key)
-            selected.difference_update(keys)
-        elif selected & keys:
-            selected.difference_update(keys)
-            selected.add(key)
+        ambiguous_sources.update(ambiguous & original_forgotten)
+        suppressed_sources = frozenset(keys & original_forgotten)
+        selected_sources = frozenset(keys & original_selected)
+        for source in suppressed_sources | selected_sources:
+            prior_target = claims.setdefault(source, key)
+            if prior_target != key:
+                ambiguous_sources.add(source)
+        if suppressed_sources or selected_sources:
+            plan.append((key, suppressed_sources, selected_sources))
+
+    # No candidate may consume evidence needed by a later candidate's check.
+    # Validate the complete plan against the original immutable sets first.
+    if ambiguous_sources:
+        raise RoutingError("native-identity-ambiguous")
+
+    removed_suppressions, removed_selections = set(), set()
+    suppressed_targets, selected_targets = set(), set()
+    for key, suppressed_sources, selected_sources in plan:
+        removed_suppressions.update(suppressed_sources)
+        removed_selections.update(selected_sources)
+        if suppressed_sources:
+            suppressed_targets.add(key)
+        if selected_sources:
+            selected_targets.add(key)
+    forgotten = (set(original_forgotten) - removed_suppressions) | suppressed_targets
+    selected = ((set(original_selected) - removed_selections) | selected_targets) - forgotten
     return sorted(selected), forgotten, history
 
 

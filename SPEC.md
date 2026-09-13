@@ -267,6 +267,14 @@ Ambiguous legacy path-hash suppression fails closed with
 `native-identity-ambiguous` until explicit re-add/identity selection. It MUST
 NOT be transferred to another inode or consumed while guessing a migration.
 
+Migration MUST be two-phase. First snapshot the original selection/suppression
+sets and plan every candidate and observation without mutating those sets.
+Evaluate all ambiguity against the original suppression set, and refuse if
+multiple distinct targets claim one original selected/suppressed identity.
+Only after the complete plan is validated may removals and additions be
+applied as set operations; suppression wins over selection. Candidate/profile
+order MUST NOT affect acceptance, refusal or the resulting routing sets.
+
 Clear/forget discard in-progress provider staging, preserve other partitions,
 and regenerate all tracked manager views. No source identity or history is
 rewritten. A duplicate local name MUST fail closed during open/resolve.
