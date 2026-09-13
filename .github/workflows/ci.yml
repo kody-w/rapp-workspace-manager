@@ -22,6 +22,6 @@ jobs:
       - name: Unit tests
         run: PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -v
       - name: Compile
-        run: python3 -m py_compile tools/workspace_manager.py tools/append_frame.py
+        run: python3 -m py_compile tools/*.py
       - name: RAPP compliance
-        run: python3 rapp-1/rapp_check.py . --json
+        run: PYTHONDONTWRITEBYTECODE=1 python3 tools/check_conformance.py . --rapp1-path rapp-1

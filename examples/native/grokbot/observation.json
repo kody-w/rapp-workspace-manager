@@ -1,0 +1,9 @@
+{
+  "provider": "grokbot",
+  "observation_id": "grokbot:bdde0d41a57285703521e336d538463cc817638d352d66314fac6e5d5ec394df",
+  "observation_version": 2,
+  "profileIdentity": [1, 501],
+  "profileRoot": "/Applications/Grokbot.app",
+  "state": "app-detected",
+  "mapping": "workspace-mapping-unavailable"
+}

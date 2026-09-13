@@ -6,3 +6,8 @@ __pycache__/
 dist/
 build/
 RAPP-Workspace-Manager/
+.test-fixtures/
+/registry.json
+/HOME.md
+/*.code-workspace
+/.routing.lock

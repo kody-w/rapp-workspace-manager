@@ -1,6 +1,10 @@
 {
+  "editor_view": "estate.code-workspace",
+  "editor_views": ["estate.code-workspace"],
+  "forgotten": [],
   "generated_utc": "2026-01-01T00:00:00.000Z",
   "manager_rappid": "rappid:@example/local-workspaces:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "providers": {},
   "scan_roots": [
     "/home/example/src"
   ],
@@ -11,7 +15,12 @@
       "mode": null,
       "name": "example-project",
       "path": "/home/example/src/example-project",
+      "filesystemIdentity": [1, 101],
+      "pointer_id": "local:b71c04a8ffd73760ef800e8cb0221d9b34b411e8331560507d5dd2feb2335f53",
+      "pointer_type": "local-directory",
+      "pointer_version": 2,
       "rappid": null,
+      "selection": "exact",
       "tags": [],
       "world_id": null
     }

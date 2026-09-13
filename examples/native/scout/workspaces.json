@@ -1,0 +1,15 @@
+{
+  "version": 3,
+  "workspaces": [
+    {
+      "id": "example-local",
+      "providerId": "local",
+      "rootId": "/home/example/work/project-01"
+    },
+    {
+      "id": "example-cloud",
+      "providerId": "odsp",
+      "rootId": "odsp:example-opaque-root-reference"
+    }
+  ]
+}
