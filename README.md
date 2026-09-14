@@ -16,6 +16,11 @@ AI workspace metadata. The manager is the **first editor root, not a container**
 There is no new estate protocol, common AI session store, transcript index,
 copied project content, or competing task system.
 
+For autonomous end-to-end setup, migration, grouping, testing, and maintenance,
+use [`.github/skills/autonomous-rapp-estate-manager/SKILL.md`](.github/skills/autonomous-rapp-estate-manager/SKILL.md).
+It composes this manager with RAPP Workspace and RAPP/1 while preserving the
+pointer-only boundary.
+
 ## Requirements and privacy
 
 Python 3.10+, no third-party Python packages, and a local canonical
@@ -79,6 +84,63 @@ It replaces the Git-discovered local partition while retaining exact selections
 and all native partitions. Nested Git roots and worktree `.git` **markers** are
 discovered without reading `.git` contents. Home, native-store roots, symlinks,
 pruned build directories and the manager subtree are not traversed.
+
+## Local recursive organization overlay
+
+The registry remains `schema: rapp-workspace-manager/1`. Its additive
+`organization` version 1 field is a **local manager overlay**, not a new estate
+protocol, identity system, task store or content index. It groups selected local
+pointers without moving them or changing their `rapp-workspace` or RAPP/1
+identity. The manager remains the first editor root and never becomes a
+container for routed workspaces.
+
+Legacy registries receive one empty in-memory root group (`root`, displayed as
+`Estate`) when loaded; loading does not rewrite the registry or remint identity.
+Groups form a bounded parent-ID tree. A selected local pointer may have one
+alias and zero or one placement; no placement means **Unorganized**. Unknown
+keys, versions, pointers, parents, duplicate IDs/placements, cycles and invalid
+names fail closed.
+
+```bash
+python3 tools/workspace_manager.py group add \
+  --workspace ~/local-workspaces --id engineering --name "Engineering"
+python3 tools/workspace_manager.py group add \
+  --workspace ~/local-workspaces --id services --name "Services" \
+  --parent engineering
+python3 tools/workspace_manager.py group assign \
+  --workspace ~/local-workspaces --id services \
+  --path ~/src/example-service --alias service
+python3 tools/workspace_manager.py tree --workspace ~/local-workspaces
+python3 tools/workspace_manager.py group unassign \
+  --workspace ~/local-workspaces --path ~/src/example-service
+python3 tools/workspace_manager.py group remove \
+  --workspace ~/local-workspaces --id services
+```
+
+Root removal and removal of a group with children or placements are refused.
+Exact and recursive rescans retain aliases and placements when the selected
+pointer identity remains, and prune them when it does not. Clear/forget also
+prune active organization references; re-add returns the pointer unorganized
+until an explicit assignment.
+
+`focus` creates or updates a deterministic manager-owned editor view:
+
+```bash
+python3 tools/workspace_manager.py focus \
+  --workspace ~/local-workspaces --target engineering
+python3 tools/workspace_manager.py focus \
+  --workspace ~/local-workspaces --target service --print-path
+```
+
+A group focus contains placed local pointers in that group and all descendant
+groups. A workspace focus contains only the uniquely resolved selected local
+name or alias. `--print-path` is valid only for workspace targets. Focused views
+are tracked with existing editor views, regenerated after routing/organization
+changes, manager-first, atomic and JSON/JSONC-value preserving. The ordinary
+`editor-view` remains the all-selected local/native view.
+
+See [docs/recursive-estate-pattern.md](docs/recursive-estate-pattern.md) for a
+bounded delivery and private-pilot checklist.
 
 ## Explicit native adapters
 
@@ -220,8 +282,11 @@ editor files fail closed. Only selected, existing, no-follow local directories
 become folders. Missing, unresolved, protected and nonlocal provider roots
 remain in the dashboard/catalog, never fabricated filesystem paths.
 
-`open` operates on unique local pointer names only. Duplicate names and
-unavailable paths are refused; it never invokes a provider lifecycle API.
+`open` operates on unique local pointer names or organization aliases.
+Ambiguous names/aliases and unavailable paths are refused. With no
+`--print-path`, it prefers `code -n <path>` when the VS Code CLI is available,
+then retains the platform folder-opener fallback. It never invokes a provider
+lifecycle API.
 The dashboard caps its native preview at 100 candidates per provider.
 
 ## Filesystem identity and legacy cache safety
@@ -283,8 +348,9 @@ There are also fixed caps: 16 native profile roots, 128 exact/recursive scan
 roots, recursion depth 64, 128 kernel ancestry steps, 64 saved namespaces per
 provider, 4 KiB metadata strings, 128 MiB compact metadata per
 provider catalog/stage, 512 MiB manager registry, 8 MiB existing editor files,
-64 KiB local RAPP identity files, and 2 GiB Hermes database file size (not a
-database-copy budget). Editor projection allows 10,000 folders, with a
+64 KiB local RAPP identity files, 512 organization groups, 10,000 aliases,
+10,000 placements, and 2 GiB Hermes database file size (not a database-copy
+budget). Editor projection allows 10,000 folders, with a
 10-second cooperative directory-verification deadline. No directory inventory
 is recursive for native stores.
 
