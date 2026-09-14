@@ -4,6 +4,35 @@
   "forgotten": [],
   "generated_utc": "2026-01-01T00:00:00.000Z",
   "manager_rappid": "rappid:@example/local-workspaces:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "organization": {
+    "aliases": [
+      {
+        "alias": "example",
+        "pointer_id": "local:b71c04a8ffd73760ef800e8cb0221d9b34b411e8331560507d5dd2feb2335f53"
+      }
+    ],
+    "focused_views": [],
+    "groups": [
+      {
+        "id": "root",
+        "name": "Estate",
+        "parent": null
+      },
+      {
+        "id": "projects",
+        "name": "Projects",
+        "parent": "root"
+      }
+    ],
+    "placements": [
+      {
+        "group_id": "projects",
+        "pointer_id": "local:b71c04a8ffd73760ef800e8cb0221d9b34b411e8331560507d5dd2feb2335f53"
+      }
+    ],
+    "root_group": "root",
+    "version": 1
+  },
   "providers": {},
   "scan_roots": [
     "/home/example/src"

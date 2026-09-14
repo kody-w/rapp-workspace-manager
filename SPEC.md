@@ -39,6 +39,8 @@ Additive routing fields:
 - `editor_view`: primary manager-owned `.code-workspace` filename.
 - `editor_views`: bounded list of generated filenames, all regenerated on
   pointer changes so obsolete views do not retain forgotten routes.
+- `organization`: version 1 manager-owned recursive organization metadata for
+  selected local pointers only.
 
 Legacy local registries load without reminting RAPP identity. Missing extension
 fields receive defaults in memory; legacy pointer version 1 remains identified
@@ -86,6 +88,57 @@ into another provider's model.
 Version 1 keys validate against their original path spelling without native I/O.
 They are not trusted as filesystem identity. In particular, v1 Copilot metadata
 must never supply a local route or reusable YAML parse cache.
+
+### 2.1 Local recursive organization overlay
+
+`organization` is an additive local projection policy inside
+`rapp-workspace-manager/1`. It is not a new estate protocol, wire format,
+identity system, source hierarchy, task store or content index. It composes
+with `rapp-workspace/1.1` by leaving the manager as the first sibling editor
+root, and with RAPP/1 by leaving every manager/source RAPPID, world and frame
+chain unchanged.
+
+The object has exactly:
+
+- `version: 1`;
+- `root_group: "root"`;
+- `groups`: 1–512 exact `{id,name,parent}` records;
+- `aliases`: 0–10,000 exact `{pointer_id,alias}` records;
+- `placements`: 0–10,000 exact `{pointer_id,group_id}` records;
+- `focused_views`: exact `{filename,target_type,target_id}` records associated
+  with tracked `editor_views`.
+
+The root record has ID `root`, display name `Estate` by default and
+`parent: null`. It is the only null-parent group. Every other parent is a
+stable group ID. Group IDs are 1–64 lowercase ASCII slug characters beginning
+with a letter; names and aliases are nonempty, trimmed, control-free UTF-8
+strings of at most 128 bytes. Duplicate group IDs, alias records for one
+pointer, placements for one pointer, focused filenames, orphan parents,
+self/cross cycles, unknown keys, unknown versions and over-bound arrays MUST
+fail closed.
+
+Aliases and placements may reference only IDs in the current selected local
+`workspaces` list. Alias text need not be globally unique; commands requiring a
+workspace target MUST refuse when a case-insensitive name/alias resolves to
+more than one selected pointer. Focus MUST also refuse a collision between a
+group ID and a local name/alias. A pointer has zero or one placement. Zero
+means it appears in the synthetic `Unorganized` section; that section is not a
+group or persisted pointer identity.
+
+Loading a legacy registry with no `organization` field MUST synthesize the
+default empty overlay in memory only. It MUST NOT rewrite the source registry,
+remint the manager RAPPID or upgrade local pointer identity merely by loading.
+Exact/recursive scans map retained overlay references by stable pointer ID (and
+the verified legacy-to-current local selection replacement where applicable).
+Aliases and placements for no-longer-selected pointers are pruned. Clear and
+forget do the same. Re-add does not restore a pruned placement or alias.
+
+Focused view targets are `group`, `workspace`, or manager-internal `empty`.
+`empty` has `target_id: null` and preserves a previously tracked file as a
+manager-only safe projection after its target disappears. Group targets must
+exist; workspace targets must be selected local pointer IDs. Focused filenames
+must be tracked in `editor_views` and cannot be the primary all-selected
+`editor_view`.
 
 ## 3. Provider partitions, selection and failure
 
@@ -285,12 +338,21 @@ an observation only enables later rediscovery; it never invents a mapping.
 
 ## 7. Safe deterministic projections
 
-The editor view contains the manager first, then selected local entries in
-owner order, then explicitly selected native references in deterministic
-provider/identifier/path order. Dedupe filesystem objects by device/inode for
-the view only; never collapse distinct native identities. A Claude selection can contribute
-multiple verified local associations. Copilot uses explicit cwd, otherwise
-explicit git_root; Hermes sessions without cwd stay unknown.
+The all-selected editor view contains the manager first, then selected local
+entries in owner order, then explicitly selected native references in
+deterministic provider/identifier/path order. Dedupe filesystem objects by
+device/inode for the view only; never collapse distinct native identities. A
+Claude selection can contribute multiple verified local associations. Copilot
+uses explicit cwd, otherwise explicit git_root; Hermes sessions without cwd
+stay unknown.
+
+A focused group view contains only selected local pointers placed directly in
+that group or recursively in descendant groups. A focused workspace view
+contains only its one selected local pointer. Both retain the manager as first
+folder and omit native-provider selections. The default filename is derived
+deterministically from the stable group or local pointer ID and remains a
+direct manager child. `--print-path` resolves and prints only workspace
+targets; group targets MUST be refused.
 
 Only existing absolute no-follow local directories are folders. Unknown,
 missing, protected and nonlocal references remain visible in the dashboard/
@@ -315,16 +377,20 @@ editor generation, opening, exact selection and recursive discovery.
 Editor output filenames MUST be direct children of the private manager and
 end in `.code-workspace`. Preserve unrelated JSON/JSONC settings, extensions
 and top-level values; replace only `folders`. Comments/formatting need not
-survive. Corrupt/unsafe outputs fail closed. The dashboard renders escaped
+survive. Unicode-normalized, case-folded filename aliases are conservatively
+treated as one output so projections cannot overwrite one another on
+case-insensitive filesystems. Corrupt/unsafe outputs fail closed. The dashboard renders escaped
 metadata only and caps its native preview at 100 candidates per provider.
 
 Writes use exclusive same-directory staging, flush/fsync, atomic replace and
 directory fsync; manager output symlinks and multi-link files are refused.
 Metadata readers and manager locks also refuse hardlinks before reading content
-or locking; lock descriptors are read-only. Registry and projections
+or locking; lock descriptors are read-only. `HOME.md` includes at most 200
+organization-tree lines and never reads routed content. Registry and projections
 are each atomic, **not a multi-file transaction**. Registry is committed first;
 after a crash regenerate projections from it. Retained editor filenames ensure
-that previously generated views can also be rebuilt after clear/forget.
+that previously generated all-selected and focused views can also be rebuilt
+after routing or organization changes.
 
 ## 8. Bounds
 
@@ -337,7 +403,8 @@ Fixed limits: 16 provider roots, 64 namespace-history entries per provider,
 kernel ancestry steps, 4 KiB strings, 32 root routing tags, 64 KiB root
 RAPP identity file, 128 MiB compact provider catalog/stage, 512 MiB manager
 registry, 16 editor views, 8 MiB existing editor file, 2 GiB Hermes database
-stat size. Editor folder resolution allows 10,000 folders and a 10-second
+stat size, 512 organization groups, 10,000 organization aliases and 10,000
+organization placements. Editor folder resolution allows 10,000 folders and a 10-second
 cooperative verification deadline. Checks include regular-file types, no-follow ancestors/leaves,
 before/after file stamps and bounded transfer. Unsupported no-follow platforms
 fail closed.
@@ -359,8 +426,15 @@ Multi-batch observations are not native transactional snapshots.
   pointer_id=None)` supports `select`, `clear`, `clear-cache`, `forget`,
   `re-add` and no native lifecycle operations.
 - CLI: `provider inspect|refresh|list|select|clear|clear-cache|forget|re-add`,
-  `estate`, `scan --mode recursive|exact`, `editor-view`, and local
+  `estate`, `scan --mode recursive|exact`, `editor-view`,
+  `group add|remove|assign|unassign`, `tree`, `focus`, and local
   `list|open|clear|clear-cache|forget|re-add`.
+
+`group remove` refuses the logical root and groups with child groups or direct
+placements. `tree` renders the recursive group structure followed by
+`Unorganized`. `focus --target` accepts a group ID or a unique case-insensitive
+selected local name/alias. `open --name` accepts the same local name/alias
+resolution and prefers `code -n` before the existing safe platform fallback.
 
 Inspect/list never write native data or manager state. Refresh exits 1 on
 stale/error and 0 for complete or bounded in-progress work. Selection and

@@ -6,10 +6,12 @@ import copy
 import json
 import os
 import platform
+import re
 import shutil
 import stat
 import subprocess
 import sys
+import unicodedata
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -36,6 +38,18 @@ PROVIDER_FIELDS = {
     "error", "last_attempt_utc", "last_success_utc", "pending", "observations",
     "profileIdentities", "profileHistory",
 }
+ORGANIZATION_FIELDS = {
+    "version", "root_group", "groups", "aliases", "placements", "focused_views",
+}
+GROUP_FIELDS = {"id", "name", "parent"}
+ALIAS_FIELDS = {"pointer_id", "alias"}
+PLACEMENT_FIELDS = {"pointer_id", "group_id"}
+FOCUSED_VIEW_FIELDS = {"filename", "target_type", "target_id"}
+ORGANIZATION_ROOT_ID = "root"
+MAX_ORGANIZATION_GROUPS = 512
+MAX_ORGANIZATION_POINTERS = 10000
+MAX_HOME_ORGANIZATION_LINES = 200
+ORGANIZATION_ID = re.compile(r"^[a-z][a-z0-9]*(?:[-_.][a-z0-9]+)*$")
 PRUNED_DIRS = {
     ".cache", ".git", ".next", ".parcel-cache", ".venv", "__pycache__",
     "build", "dist", "node_modules", "target", "vendor",
@@ -230,6 +244,14 @@ def render_home(identity, registry):
             )
     providers = "\n".join(provider_rows) or "| _None inspected_ | - | 0 | 0 | - |"
     candidates = "\n".join(candidate_rows) or "| _No native candidates_ | - | - | - | - |"
+    if "organization" in registry and all("pointer_id" in item for item in entries):
+        organization_tree = render_organization_tree(
+            registry, MAX_HOME_ORGANIZATION_LINES,
+        ).rstrip()
+    else:
+        legacy_lines = ["Estate [root]", "Unorganized"]
+        legacy_lines.extend(f"  - {item['name']}" for item in entries[:MAX_HOME_ORGANIZATION_LINES - 2])
+        organization_tree = "\n".join(legacy_lines)
     return f"""# Local Workspace Manager
 
 **PRIVATE / NEVER PUBLISH.** This dashboard contains pointers only. It must
@@ -246,6 +268,16 @@ never absorb files or content from the workspaces it routes.
 | Name | Kind | Mode | Local path | Tags |
 | --- | --- | --- | --- | --- |
 {table}
+
+## Organization
+
+This is a local manager-owned overlay over selected local pointers. It does not
+change source workspaces, native stores, rapp-workspace, or RAPP/1 identity.
+The dashboard renders at most {MAX_HOME_ORGANIZATION_LINES} organization lines.
+
+```text
+{organization_tree}
+```
 
 ## Native provider catalogs
 
@@ -271,6 +303,10 @@ python3 tools/workspace_manager.py scan --workspace . --root ~/src
 python3 tools/workspace_manager.py list --workspace .
 python3 tools/workspace_manager.py open --workspace . --name <workspace-name>
 python3 tools/workspace_manager.py editor-view --workspace .
+python3 tools/workspace_manager.py group add --workspace . --id work --name "Work"
+python3 tools/workspace_manager.py group assign --workspace . --id work --path ~/src/project --alias project
+python3 tools/workspace_manager.py tree --workspace .
+python3 tools/workspace_manager.py focus --workspace . --target work
 python3 tools/workspace_manager.py provider list --workspace . --provider copilot
 ```
 
@@ -346,6 +382,7 @@ Never delete, move, clone, edit, publish or disconnect a routed project/native s
         "generated_utc": utc_now(), "scan_roots": [], "workspaces": [],
         "providers": {}, "forgotten": [], "editor_view": "estate.code-workspace",
         "editor_views": ["estate.code-workspace"],
+        "organization": default_organization(),
     }
     save_registry(workspace, identity, registry)
     print(f"INITIALIZED {workspace}\n{rappid}")
@@ -358,6 +395,46 @@ def empty_provider():
         "last_success_utc": None, "pending": None, "observations": [],
         "profileIdentities": {}, "profileHistory": [],
     }
+
+
+def default_organization():
+    return {
+        "version": 1,
+        "root_group": ORGANIZATION_ROOT_ID,
+        "groups": [
+            {"id": ORGANIZATION_ROOT_ID, "name": "Estate", "parent": None},
+        ],
+        "aliases": [],
+        "placements": [],
+        "focused_views": [],
+    }
+
+
+def organization_id(value):
+    if (
+        not isinstance(value, str) or len(value) > 64
+        or ORGANIZATION_ID.fullmatch(value) is None
+    ):
+        raise RoutingError("organization-id-invalid")
+    return value
+
+
+def editor_name_key(value):
+    return unicodedata.normalize("NFC", editor_name(value)).casefold()
+
+
+def organization_label(value, field):
+    try:
+        invalid = (
+            not isinstance(value, str) or value != value.strip() or not value
+            or len(value.encode("utf-8")) > 128
+            or any(ord(char) < 32 for char in value)
+        )
+    except (AttributeError, UnicodeError):
+        invalid = True
+    if invalid:
+        raise RoutingError(f"organization-{field}-invalid")
+    return value
 
 
 def validate_ids(values, provider):
@@ -373,10 +450,115 @@ def validate_ids(values, provider):
             raise RoutingError("selection-schema-mismatch")
 
 
+def validate_organization(organization, selected_ids, editor_view, editor_views):
+    if (
+        not isinstance(organization, dict) or set(organization) != ORGANIZATION_FIELDS
+        or type(organization["version"]) is not int or organization["version"] != 1
+        or organization["root_group"] != ORGANIZATION_ROOT_ID
+    ):
+        raise RoutingError("organization-schema-mismatch")
+    groups = organization["groups"]
+    if not isinstance(groups, list) or not 0 < len(groups) <= MAX_ORGANIZATION_GROUPS:
+        raise RoutingError("organization-group-bound")
+    by_id = {}
+    for group in groups:
+        if not isinstance(group, dict) or set(group) != GROUP_FIELDS:
+            raise RoutingError("organization-group-schema-mismatch")
+        group_id = organization_id(group["id"])
+        organization_label(group["name"], "name")
+        parent = group["parent"]
+        if parent is not None:
+            organization_id(parent)
+        if group_id in by_id:
+            raise RoutingError("organization-group-id-duplicate")
+        by_id[group_id] = group
+    if (
+        ORGANIZATION_ROOT_ID not in by_id
+        or by_id[ORGANIZATION_ROOT_ID]["parent"] is not None
+        or sum(group["parent"] is None for group in groups) != 1
+    ):
+        raise RoutingError("organization-root-mismatch")
+    for group_id, group in by_id.items():
+        parent = group["parent"]
+        if group_id != ORGANIZATION_ROOT_ID and parent not in by_id:
+            raise RoutingError("organization-orphan-parent")
+        if parent == group_id:
+            raise RoutingError("organization-cycle")
+    for group_id in by_id:
+        visited, current = set(), group_id
+        while current != ORGANIZATION_ROOT_ID:
+            if current in visited:
+                raise RoutingError("organization-cycle")
+            visited.add(current)
+            current = by_id[current]["parent"]
+
+    aliases = organization["aliases"]
+    if not isinstance(aliases, list) or len(aliases) > MAX_ORGANIZATION_POINTERS:
+        raise RoutingError("organization-alias-bound")
+    aliased = set()
+    for alias in aliases:
+        if not isinstance(alias, dict) or set(alias) != ALIAS_FIELDS:
+            raise RoutingError("organization-alias-schema-mismatch")
+        validate_ids([alias["pointer_id"]], "local")
+        organization_label(alias["alias"], "alias")
+        if alias["pointer_id"] not in selected_ids:
+            raise RoutingError("organization-pointer-not-selected")
+        if alias["pointer_id"] in aliased:
+            raise RoutingError("organization-alias-pointer-duplicate")
+        aliased.add(alias["pointer_id"])
+
+    placements = organization["placements"]
+    if not isinstance(placements, list) or len(placements) > MAX_ORGANIZATION_POINTERS:
+        raise RoutingError("organization-placement-bound")
+    placed = set()
+    for placement in placements:
+        if not isinstance(placement, dict) or set(placement) != PLACEMENT_FIELDS:
+            raise RoutingError("organization-placement-schema-mismatch")
+        validate_ids([placement["pointer_id"]], "local")
+        organization_id(placement["group_id"])
+        if placement["pointer_id"] not in selected_ids:
+            raise RoutingError("organization-pointer-not-selected")
+        if placement["group_id"] not in by_id:
+            raise RoutingError("organization-placement-group-unknown")
+        if placement["pointer_id"] in placed:
+            raise RoutingError("organization-placement-duplicate")
+        placed.add(placement["pointer_id"])
+
+    focused_views = organization["focused_views"]
+    if not isinstance(focused_views, list) or len(focused_views) > 16:
+        raise RoutingError("focused-view-bound")
+    filenames = set()
+    for focused in focused_views:
+        if not isinstance(focused, dict) or set(focused) != FOCUSED_VIEW_FIELDS:
+            raise RoutingError("focused-view-schema-mismatch")
+        filename = editor_name(focused["filename"])
+        if (
+            editor_name_key(filename) in filenames
+            or filename not in editor_views
+            or editor_name_key(filename) == editor_name_key(editor_view)
+        ):
+            raise RoutingError("focused-view-schema-mismatch")
+        filenames.add(editor_name_key(filename))
+        target_type, target_id = focused["target_type"], focused["target_id"]
+        if target_type == "group":
+            if not isinstance(target_id, str) or target_id not in by_id:
+                raise RoutingError("focused-view-target-unknown")
+        elif target_type == "workspace":
+            validate_ids([target_id], "local")
+            if target_id not in selected_ids:
+                raise RoutingError("focused-view-target-unknown")
+        elif target_type == "empty":
+            if target_id is not None:
+                raise RoutingError("focused-view-schema-mismatch")
+        else:
+            raise RoutingError("focused-view-schema-mismatch")
+
+
 def validate_registry(registry):
     if set(registry) != {
         "schema", "manager_rappid", "world_id", "generated_utc", "scan_roots",
         "workspaces", "providers", "forgotten", "editor_view", "editor_views",
+        "organization",
     } or registry["schema"] != REGISTRY_SCHEMA:
         raise RoutingError("registry-schema-mismatch")
     if (
@@ -492,8 +674,13 @@ def validate_registry(registry):
         or len(set(views)) != len(views) or registry["editor_view"] not in views
     ):
         raise RoutingError("editor-view-schema-mismatch")
+    if len({editor_name_key(name) for name in views}) != len(views):
+        raise RoutingError("editor-view-schema-mismatch")
     for name in views:
         editor_name(name)
+    validate_organization(
+        registry["organization"], ids, registry["editor_view"], set(views),
+    )
 
 
 def load_registry(workspace):
@@ -507,6 +694,7 @@ def load_registry(workspace):
     registry.setdefault("forgotten", [])
     registry.setdefault("editor_view", "estate.code-workspace")
     registry.setdefault("editor_views", [registry["editor_view"]])
+    registry.setdefault("organization", default_organization())
     if not isinstance(registry.get("workspaces"), list):
         raise RoutingError("registry-schema-mismatch")
     for item in registry["workspaces"]:
@@ -523,6 +711,231 @@ def load_registry(workspace):
         state.setdefault("profileHistory", [])
     validate_registry(registry)
     return registry
+
+
+def organization_aliases(registry):
+    return {
+        item["pointer_id"]: item["alias"]
+        for item in registry["organization"]["aliases"]
+    }
+
+
+def organization_groups(registry):
+    return {
+        item["id"]: item
+        for item in registry["organization"]["groups"]
+    }
+
+
+def local_pointer_remap(old_workspaces, new_workspaces, referenced_ids):
+    new_by_id = {item["pointer_id"]: item for item in new_workspaces}
+    new_by_path, new_by_identity = {}, {}
+    for item in new_workspaces:
+        new_by_path.setdefault(str(absolute_path(item["path"])), []).append(item["pointer_id"])
+        if item.get("filesystemIdentity") is not None:
+            new_by_identity.setdefault(
+                tuple(item["filesystemIdentity"]), [],
+            ).append(item["pointer_id"])
+    mapping = {
+        pointer_id: pointer_id
+        for pointer_id in referenced_ids
+        if pointer_id in new_by_id
+    }
+    old_by_id = {item["pointer_id"]: item for item in old_workspaces}
+    for pointer_id in referenced_ids - set(mapping):
+        old = old_by_id.get(pointer_id)
+        if old is None:
+            continue
+        identity = old.get("filesystemIdentity")
+        if old.get("pointer_version", 1) >= 2:
+            matches = (
+                list(new_by_identity.get(tuple(identity), []))
+                if identity is not None else []
+            )
+        else:
+            matches = list(new_by_path.get(str(absolute_path(old["path"])), []))
+            try:
+                identity = directory_info(old["path"], missing_ok=True)["identity"]
+            except RoutingError:
+                identity = None
+            if identity is not None:
+                matches.extend(new_by_identity.get(tuple(identity), []))
+        matches = list(dict.fromkeys(matches))
+        if len(matches) > 1:
+            raise RoutingError("organization-pointer-remap-ambiguous")
+        if matches:
+            mapping[pointer_id] = matches[0]
+    return mapping
+
+
+def replace_local_workspaces(registry, workspaces):
+    organization = copy.deepcopy(registry["organization"])
+    referenced = {
+        item["pointer_id"]
+        for field in ("aliases", "placements")
+        for item in organization[field]
+    }
+    referenced.update(
+        item["target_id"]
+        for item in organization["focused_views"]
+        if item["target_type"] == "workspace"
+    )
+    mapping = local_pointer_remap(registry["workspaces"], workspaces, referenced)
+
+    for field in ("aliases", "placements"):
+        updated, seen = [], set()
+        for item in organization[field]:
+            pointer_id = mapping.get(item["pointer_id"])
+            if pointer_id is None:
+                continue
+            if pointer_id in seen:
+                raise RoutingError("organization-pointer-remap-ambiguous")
+            value = dict(item)
+            value["pointer_id"] = pointer_id
+            updated.append(value)
+            seen.add(pointer_id)
+        organization[field] = updated
+    for focused in organization["focused_views"]:
+        if focused["target_type"] != "workspace":
+            continue
+        pointer_id = mapping.get(focused["target_id"])
+        if pointer_id is None:
+            focused.update(target_type="empty", target_id=None)
+        else:
+            focused["target_id"] = pointer_id
+    registry["workspaces"] = workspaces
+    registry["organization"] = organization
+
+
+def selected_local_pointer(registry, value):
+    path = absolute_path(value)
+    exact = [
+        item for item in registry["workspaces"]
+        if absolute_path(item["path"]) == path
+    ]
+    if not exact:
+        info = directory_info(path, missing_ok=True)
+        if info["identity"] is not None:
+            exact = [
+                item for item in registry["workspaces"]
+                if item.get("filesystemIdentity") == info["identity"]
+            ]
+    if not exact:
+        raise RoutingError("workspace-not-registered")
+    if len(exact) > 1:
+        raise RoutingError("workspace-path-ambiguous")
+    return exact[0]
+
+
+def matching_local_targets(registry, target):
+    if not isinstance(target, str) or not target or any(ord(char) < 32 for char in target):
+        raise RoutingError("workspace-not-registered")
+    folded, aliases, matches = target.casefold(), organization_aliases(registry), {}
+    for item in registry["workspaces"]:
+        alias = aliases.get(item["pointer_id"])
+        if item["name"].casefold() == folded or alias is not None and alias.casefold() == folded:
+            matches[item["pointer_id"]] = item
+    return matches
+
+
+def resolve_local_target(registry, target):
+    matches = matching_local_targets(registry, target)
+    if not matches:
+        raise RoutingError("workspace-not-registered")
+    if len(matches) > 1:
+        raise RoutingError("workspace-name-or-alias-ambiguous")
+    return next(iter(matches.values()))
+
+
+def organization_children(groups, parent):
+    return sorted(
+        (group for group in groups.values() if group["parent"] == parent),
+        key=lambda group: (group["name"].casefold(), group["id"]),
+    )
+
+
+def organization_pointer_label(pointer, aliases):
+    alias = aliases.get(pointer["pointer_id"])
+    return f"{alias} -> {pointer['name']}" if alias and alias != pointer["name"] else alias or pointer["name"]
+
+
+def organization_tree_lines(registry):
+    organization = registry["organization"]
+    groups = organization_groups(registry)
+    pointers = {item["pointer_id"]: item for item in registry["workspaces"]}
+    aliases = organization_aliases(registry)
+    placements = {}
+    for item in organization["placements"]:
+        placements.setdefault(item["group_id"], []).append(item["pointer_id"])
+    for pointer_ids in placements.values():
+        pointer_ids.sort(
+            key=lambda pointer_id: (
+                organization_pointer_label(pointers[pointer_id], aliases).casefold(),
+                pointer_id,
+            )
+        )
+    lines = []
+
+    def render(group_id, depth):
+        group = groups[group_id]
+        lines.append(f"{'  ' * depth}{group['name']} [{group_id}]")
+        for pointer_id in placements.get(group_id, []):
+            pointer = pointers[pointer_id]
+            lines.append(
+                f"{'  ' * (depth + 1)}- "
+                f"{organization_pointer_label(pointer, aliases)} [{pointer_id}]"
+            )
+        for child in organization_children(groups, group_id):
+            render(child["id"], depth + 1)
+
+    render(organization["root_group"], 0)
+    placed = {item["pointer_id"] for item in organization["placements"]}
+    unorganized = sorted(
+        (item for item in registry["workspaces"] if item["pointer_id"] not in placed),
+        key=lambda item: (
+            organization_pointer_label(item, aliases).casefold(),
+            item["pointer_id"],
+        ),
+    )
+    lines.append("Unorganized")
+    for pointer in unorganized:
+        lines.append(
+            f"  - {organization_pointer_label(pointer, aliases)} [{pointer['pointer_id']}]"
+        )
+    return lines
+
+
+def render_organization_tree(registry, max_lines=None):
+    lines = organization_tree_lines(registry)
+    if max_lines is not None and len(lines) > max_lines:
+        lines = lines[:max_lines - 1] + ["... organization tree truncated ..."]
+    return "\n".join(lines) + "\n"
+
+
+def group_pointer_ids(registry, group_id):
+    groups = organization_groups(registry)
+    if group_id not in groups:
+        raise RoutingError("organization-group-unknown")
+    placements = {}
+    for item in registry["organization"]["placements"]:
+        placements.setdefault(item["group_id"], []).append(item["pointer_id"])
+    pointers = {item["pointer_id"]: item for item in registry["workspaces"]}
+    aliases = organization_aliases(registry)
+    result = []
+
+    def collect(current):
+        result.extend(sorted(
+            placements.get(current, []),
+            key=lambda pointer_id: (
+                organization_pointer_label(pointers[pointer_id], aliases).casefold(),
+                pointer_id,
+            ),
+        ))
+        for child in organization_children(groups, current):
+            collect(child["id"])
+
+    collect(group_id)
+    return result
 
 
 def all_profile_roots(registry):
@@ -762,7 +1175,7 @@ def parse_editor(raw):
     return value
 
 
-def editor_folders(workspace, registry):
+def editor_folders(workspace, registry, local_pointer_ids=None, include_native=True):
     workspace = absolute_path(workspace)
     folders = [{"name": "RAPP Workspace Manager", "path": str(workspace)}]
     seen, profiles = {tuple(directory_identity(workspace))}, all_profile_boundaries(registry)
@@ -778,16 +1191,26 @@ def editor_folders(workspace, registry):
             folders.append({"name": name, "path": info["path"]})
             seen.add(tuple(info["identity"]))
 
-    for item in registry["workspaces"]:
+    if local_pointer_ids is None:
+        local_pointers = registry["workspaces"]
+    else:
+        by_id = {item["pointer_id"]: item for item in registry["workspaces"]}
+        local_pointers = [
+            by_id[pointer_id]
+            for pointer_id in local_pointer_ids
+            if pointer_id in by_id
+        ]
+    for item in local_pointers:
         budget.entry()
         add(item["name"], item["path"], item.get("filesystemIdentity"))
-    for provider, state in sorted(registry["providers"].items()):
-        selected = set(state["selected"])
-        for item in sorted(state["catalog"], key=lambda item: item["pointer_id"]):
-            if item["pointer_id"] in selected:
-                budget.entry()
-                for local in native_ai.local_paths(item, profiles):
-                    add(f"{provider} / {native_ai.describe(item)} / {Path(local).name}", local)
+    if include_native:
+        for provider, state in sorted(registry["providers"].items()):
+            selected = set(state["selected"])
+            for item in sorted(state["catalog"], key=lambda item: item["pointer_id"]):
+                if item["pointer_id"] in selected:
+                    budget.entry()
+                    for local in native_ai.local_paths(item, profiles):
+                        add(f"{provider} / {native_ai.describe(item)} / {Path(local).name}", local)
     budget.check()
     return folders
 
@@ -806,6 +1229,27 @@ def editor_projection(workspace, registry, filename=None, folders=None):
     return path, view
 
 
+def folders_for_editor_view(workspace, registry, filename):
+    focused = next(
+        (
+            item for item in registry["organization"]["focused_views"]
+            if item["filename"] == filename
+        ),
+        None,
+    )
+    if focused is None:
+        return editor_folders(workspace, registry)
+    if focused["target_type"] == "group":
+        pointer_ids = group_pointer_ids(registry, focused["target_id"])
+    elif focused["target_type"] == "workspace":
+        pointer_ids = [focused["target_id"]]
+    else:
+        pointer_ids = []
+    return editor_folders(
+        workspace, registry, local_pointer_ids=pointer_ids, include_native=False,
+    )
+
+
 def save_registry(workspace, identity, registry):
     workspace = absolute_path(workspace)
     stored_identity = manager_identity(workspace)
@@ -816,8 +1260,20 @@ def save_registry(workspace, identity, registry):
         raise RoutingError("registry-identity-or-world-mismatch")
     for name in ["registry.json", "HOME.md", *registry["editor_views"]]:
         ensure_output(workspace / name)
-    folders = editor_folders(workspace, registry)
-    views = [editor_projection(workspace, registry, name, folders) for name in registry["editor_views"]]
+    focused = {
+        item["filename"]: item
+        for item in registry["organization"]["focused_views"]
+    }
+    folder_cache, views = {}, []
+    for name in registry["editor_views"]:
+        target = focused.get(name)
+        key = (
+            ("all", None) if target is None
+            else (target["target_type"], target["target_id"])
+        )
+        if key not in folder_cache:
+            folder_cache[key] = folders_for_editor_view(workspace, registry, name)
+        views.append(editor_projection(workspace, registry, name, folder_cache[key]))
     encoded = json.dumps(registry, indent=2, sort_keys=True, allow_nan=False) + "\n"
     if len(encoded.encode("utf-8")) > MAX_REGISTRY_BYTES:
         raise RoutingError("registry-size-bound")
@@ -871,13 +1327,14 @@ def scan_manager(args):
             if not local_suppressed(registry, path, filesystem_id):
                 entries.append(read_workspace_pointer(path, rapp, exact=exact, budget=budget))
         if exact:
-            registry["workspaces"] = entries
+            replacement = entries
         else:
             retained = [item for item in registry["workspaces"] if item["selection"] == "exact"]
-            registry["workspaces"] = retained + [
+            replacement = retained + [
                 item for item in entries
                 if not any(matches_local(existing, item["path"], item["filesystemIdentity"]) for existing in retained)
             ]
+        replace_local_workspaces(registry, replacement)
         registry.update(scan_roots=roots, generated_utc=utc_now())
         save_registry(workspace, identity, registry)
     print(f"SCANNED {len(entries)} {'exact' if exact else 'Git'} pointers; native selections unchanged")
@@ -1022,11 +1479,17 @@ def local_action(args):
                     or not isinstance(value, str) and matches_local(value, path, item["filesystemIdentity"])
                 )
             ]
-            registry["workspaces"] = [value for value in registry["workspaces"] if value not in matches] + [item]
+            replace_local_workspaces(
+                registry,
+                [value for value in registry["workspaces"] if value not in matches] + [item],
+            )
         else:
             if not matches:
                 raise RoutingError("unknown-pointer")
-            registry["workspaces"] = [item for item in registry["workspaces"] if item not in matches]
+            replace_local_workspaces(
+                registry,
+                [item for item in registry["workspaces"] if item not in matches],
+            )
             if args.command == "forget":
                 for item in matches:
                     saved_identity = item.get("filesystemIdentity") or filesystem_id
@@ -1045,19 +1508,167 @@ def local_action(args):
     print(f"{args.command.upper()} manager pointer only")
 
 
+def group_manager(args):
+    workspace = absolute_path(args.workspace)
+    identity = manager_identity(workspace)
+    with manager_lock(workspace):
+        registry = load_registry(workspace)
+        organization = registry["organization"]
+        groups = organization_groups(registry)
+        action = args.group_command
+        if action == "add":
+            group_id = organization_id(args.id)
+            name = organization_label(args.name, "name")
+            parent = organization_id(args.parent or organization["root_group"])
+            if group_id in groups:
+                raise RoutingError("organization-group-id-duplicate")
+            if parent not in groups:
+                raise RoutingError("organization-orphan-parent")
+            if len(organization["groups"]) >= MAX_ORGANIZATION_GROUPS:
+                raise RoutingError("organization-group-bound")
+            organization["groups"].append(
+                {"id": group_id, "name": name, "parent": parent},
+            )
+            message = f"GROUP ADDED {group_id} parent={parent}"
+        elif action == "remove":
+            group_id = organization_id(args.id)
+            if group_id == organization["root_group"]:
+                raise RoutingError("organization-root-removal-refused")
+            if group_id not in groups:
+                raise RoutingError("organization-group-unknown")
+            if (
+                any(group["parent"] == group_id for group in organization["groups"])
+                or any(item["group_id"] == group_id for item in organization["placements"])
+            ):
+                raise RoutingError("organization-group-non-empty")
+            organization["groups"] = [
+                group for group in organization["groups"] if group["id"] != group_id
+            ]
+            for focused in organization["focused_views"]:
+                if focused["target_type"] == "group" and focused["target_id"] == group_id:
+                    focused.update(target_type="empty", target_id=None)
+            message = f"GROUP REMOVED {group_id}"
+        elif action == "assign":
+            group_id = organization_id(args.id)
+            if group_id not in groups:
+                raise RoutingError("organization-group-unknown")
+            pointer = selected_local_pointer(registry, args.path)
+            pointer_id = pointer["pointer_id"]
+            organization["placements"] = [
+                item for item in organization["placements"]
+                if item["pointer_id"] != pointer_id
+            ] + [{"pointer_id": pointer_id, "group_id": group_id}]
+            organization["placements"].sort(key=lambda item: item["pointer_id"])
+            if args.alias is not None:
+                alias = organization_label(args.alias, "alias")
+                organization["aliases"] = [
+                    item for item in organization["aliases"]
+                    if item["pointer_id"] != pointer_id
+                ] + [{"pointer_id": pointer_id, "alias": alias}]
+                organization["aliases"].sort(key=lambda item: item["pointer_id"])
+            alias = organization_aliases(registry).get(pointer_id)
+            message = f"ASSIGNED {pointer_id} group={group_id} alias={alias or '-'}"
+        elif action == "unassign":
+            pointer = selected_local_pointer(registry, args.path)
+            pointer_id = pointer["pointer_id"]
+            updated = [
+                item for item in organization["placements"]
+                if item["pointer_id"] != pointer_id
+            ]
+            if len(updated) == len(organization["placements"]):
+                raise RoutingError("workspace-not-assigned")
+            organization["placements"] = updated
+            message = f"UNASSIGNED {pointer_id}"
+        else:
+            raise RoutingError("unknown-group-action")
+        registry["generated_utc"] = utc_now()
+        save_registry(workspace, identity, registry)
+    print(message)
+
+
+def tree_manager(args):
+    print(render_organization_tree(load_registry(args.workspace)), end="")
+
+
+def manager_editor_output(workspace, output):
+    if output is None:
+        return None
+    value = Path(output)
+    if value.is_absolute():
+        if not same_directory(absolute_path(value).parent, workspace):
+            raise RoutingError("editor-output-must-be-manager-owned")
+        value = Path(value.name)
+    return editor_name(str(value))
+
+
+def focus_manager(args):
+    workspace = absolute_path(args.workspace)
+    identity = manager_identity(workspace)
+    with manager_lock(workspace):
+        registry = load_registry(workspace)
+        groups = organization_groups(registry)
+        group_id = args.target.casefold()
+        local_matches = matching_local_targets(registry, args.target)
+        if group_id in groups and local_matches:
+            raise RoutingError("focus-target-ambiguous")
+        resolved_path = None
+        if group_id in groups:
+            if args.print_path:
+                raise RoutingError("group-focus-has-no-workspace-path")
+            target_type, target_id = "group", group_id
+            default_output = f"focus-group-{group_id}.code-workspace"
+        else:
+            if not local_matches:
+                raise RoutingError("workspace-not-registered")
+            if len(local_matches) > 1:
+                raise RoutingError("workspace-name-or-alias-ambiguous")
+            pointer = next(iter(local_matches.values()))
+            target_type, target_id = "workspace", pointer["pointer_id"]
+            default_output = f"focus-local-{target_id.split(':', 1)[1]}.code-workspace"
+            if args.print_path:
+                resolved_path = verified_directory(
+                    pointer["path"], all_profile_boundaries(registry),
+                    pointer.get("filesystemIdentity"),
+                )
+                if resolved_path is None:
+                    raise RoutingError("local-route-unavailable")
+                check_route_boundary(workspace, resolved_path, registry)
+        filename = manager_editor_output(workspace, args.output) or editor_name(default_output)
+        if editor_name_key(filename) == editor_name_key(registry["editor_view"]):
+            raise RoutingError("focused-output-conflicts-editor-view")
+        views = set(registry["editor_views"])
+        views.add(filename)
+        if len(views) > 16:
+            raise RoutingError("editor-view-count-bound")
+        registry["editor_views"] = sorted(views)
+        registry["organization"]["focused_views"] = sorted(
+            [
+                item for item in registry["organization"]["focused_views"]
+                if item["filename"] != filename
+            ] + [{
+                "filename": filename,
+                "target_type": target_type,
+                "target_id": target_id,
+            }],
+            key=lambda item: item["filename"],
+        )
+        registry["generated_utc"] = utc_now()
+        save_registry(workspace, identity, registry)
+    print(resolved_path if args.print_path else workspace / filename)
+
+
 def editor_manager(args):
     workspace = absolute_path(args.workspace)
     identity = manager_identity(workspace)
     with manager_lock(workspace):
         registry = load_registry(workspace)
         if args.output:
-            output = Path(args.output)
-            if output.is_absolute():
-                if not same_directory(absolute_path(output).parent, workspace):
-                    raise RoutingError("editor-output-must-be-manager-owned")
-                output = output.name
-            registry["editor_view"] = editor_name(str(output))
+            registry["editor_view"] = manager_editor_output(workspace, args.output)
             registry["editor_views"] = sorted(set(registry["editor_views"]) | {registry["editor_view"]})
+            registry["organization"]["focused_views"] = [
+                item for item in registry["organization"]["focused_views"]
+                if item["filename"] != registry["editor_view"]
+            ]
         save_registry(workspace, identity, registry)
     print(workspace / registry["editor_view"])
 
@@ -1070,13 +1681,9 @@ def list_manager(args):
 
 def open_manager(args):
     registry = load_registry(args.workspace)
-    matches = [item for item in registry["workspaces"] if item["name"].casefold() == args.name.casefold()]
-    if not matches:
-        raise RoutingError("workspace-not-registered")
-    if len(matches) > 1:
-        raise RoutingError("workspace-name-ambiguous")
+    pointer = resolve_local_target(registry, args.name)
     path = verified_directory(
-        matches[0]["path"], all_profile_boundaries(registry), matches[0].get("filesystemIdentity")
+        pointer["path"], all_profile_boundaries(registry), pointer.get("filesystemIdentity")
     )
     if path is None:
         raise RoutingError("local-route-unavailable")
@@ -1085,8 +1692,11 @@ def open_manager(args):
         print(path)
         return
     system = platform.system()
+    code = shutil.which("code")
     command = ["open", path] if system == "Darwin" else ["xdg-open", path]
-    if system == "Windows":
+    if code:
+        subprocess.run(["code", "-n", path], check=True)
+    elif system == "Windows":
         os.startfile(path)
     elif shutil.which(command[0]):
         subprocess.run(command, check=True)
@@ -1153,7 +1763,44 @@ def parser():
     listing = sub.add_parser("list", help="list registered local pointers")
     listing.add_argument("--workspace", required=True)
     listing.set_defaults(run=list_manager)
-    opener = sub.add_parser("open", help="open one unique local route")
+    group = sub.add_parser("group", help="manage the local recursive organization overlay")
+    group_actions = group.add_subparsers(dest="group_command", required=True)
+    group_add = group_actions.add_parser("add", help="add a group beneath root or another group")
+    group_add.add_argument("--workspace", required=True)
+    group_add.add_argument("--id", required=True, help="stable lowercase group ID")
+    group_add.add_argument("--name", required=True, help="display name")
+    group_add.add_argument("--parent", help="parent group ID; defaults to root")
+    group_add.set_defaults(run=group_manager)
+    group_remove = group_actions.add_parser("remove", help="remove an empty non-root group")
+    group_remove.add_argument("--workspace", required=True)
+    group_remove.add_argument("--id", required=True)
+    group_remove.set_defaults(run=group_manager)
+    group_assign = group_actions.add_parser("assign", help="place one selected local pointer in a group")
+    group_assign.add_argument("--workspace", required=True)
+    group_assign.add_argument("--id", required=True, help="destination group ID")
+    group_assign.add_argument("--path", required=True, help="selected local pointer path")
+    group_assign.add_argument("--alias", help="optional local routing alias")
+    group_assign.set_defaults(run=group_manager)
+    group_unassign = group_actions.add_parser("unassign", help="remove one group placement")
+    group_unassign.add_argument("--workspace", required=True)
+    group_unassign.add_argument("--path", required=True, help="selected local pointer path")
+    group_unassign.set_defaults(run=group_manager)
+    tree = sub.add_parser("tree", help="render groups, placements, and unorganized local pointers")
+    tree.add_argument("--workspace", required=True)
+    tree.set_defaults(run=tree_manager)
+    focus = sub.add_parser("focus", help="generate a manager-owned focused editor view")
+    focus.add_argument("--workspace", required=True)
+    focus.add_argument(
+        "--target", required=True,
+        help="group ID or unique selected local name/alias",
+    )
+    focus.add_argument("--output", help="a .code-workspace filename inside the private manager")
+    focus.add_argument(
+        "--print-path", action="store_true",
+        help="print the resolved path for a workspace target; groups are refused",
+    )
+    focus.set_defaults(run=focus_manager)
+    opener = sub.add_parser("open", help="open one unique local route by name or alias")
     opener.add_argument("--workspace", required=True)
     opener.add_argument("--name", required=True)
     opener.add_argument("--print-path", action="store_true")
