@@ -20,7 +20,7 @@ jobs:
       - uses: actions/checkout@v6
         with:
           repository: kody-w/rapp-workspace
-          ref: 0ce2bccd499f4157664373f69999ead1d4cd9432
+          ref: 18f4a51f1790d22e41012d67ea72e515aaf48451
           path: rapp-workspace
       - uses: actions/setup-python@v7
         with:
