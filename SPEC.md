@@ -402,13 +402,14 @@ Default/hard scan limits: entries 150,000/200,000; Copilot metadata batch
 16/64 MiB; cooperative deadline 10/60 seconds. Count ignored entries too.
 
 Fixed limits: 16 provider roots, 64 namespace-history entries per provider,
-128 scan/exact roots, recursive depth 64, 128 lexical path components and
-kernel ancestry steps, 4 KiB strings, 32 root routing tags, 64 KiB root
-RAPP identity file, 128 MiB compact provider catalog/stage, 512 MiB manager
-registry, 16 editor views, 8 MiB existing editor file, 2 GiB Hermes database
-stat size, 512 organization groups, 10,000 organization aliases and 10,000
-organization placements. Editor folder resolution allows 10,000 folders and a 10-second
-cooperative verification deadline. Checks include regular-file types, no-follow ancestors/leaves,
+128 recursive scan roots, 10,000 explicit exact roots, recursive depth 64,
+128 lexical path components and kernel ancestry steps, 4 KiB strings, 32 root
+routing tags, 64 KiB root RAPP identity file, 128 MiB compact provider
+catalog/stage, 512 MiB manager registry, 16 editor views, 8 MiB existing editor
+file, 2 GiB Hermes database stat size, 512 organization groups, 10,000
+organization aliases and 10,000 organization placements. Editor folder
+resolution allows 10,000 folders and a 10-second cooperative verification
+deadline. Checks include regular-file types, no-follow ancestors/leaves,
 before/after file stamps and bounded transfer. Unsupported no-follow platforms
 fail closed.
 
