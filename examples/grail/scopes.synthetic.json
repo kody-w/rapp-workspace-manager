@@ -1,0 +1,17 @@
+[
+  {
+    "subject": {"namespace": "synthetic", "native_key": "document"},
+    "form": "supplied-octets",
+    "path": null
+  },
+  {
+    "subject": {"namespace": "synthetic", "native_key": "binary"},
+    "form": "supplied-octets",
+    "path": null
+  },
+  {
+    "subject": {"namespace": "synthetic", "native_key": "refusal"},
+    "form": "supplied-octets",
+    "path": null
+  }
+]

@@ -11,3 +11,5 @@ RAPP-Workspace-Manager/
 /HOME.md
 /*.code-workspace
 /.routing.lock
+/.validation/
+/.grail/
