@@ -147,7 +147,8 @@ class Workspace1ManagerTests(unittest.TestCase):
         self.assertEqual(ids, {"VERSION", "P0-1", "P0-2", "P0-3", "P0-4", "P1-FIDELITY", "P1-DOMAIN",
                               "P1-SNAPSHOT", "P1-IDENTITY", "P1-MERGE", "P1-READS", "P1-REATTACH",
                               "P1-BUDGET", "P1-HISTORY", "P1-DELTA", "P1-EFFECTS", "P1-MIGRATION",
-                              "P1-INERT", "P1-CLOSURE", "P1-PORTABILITY", "P1-LEARNING"})
+                              "P1-INERT", "P1-CLOSURE", "P1-PORTABILITY", "P1-LEARNING",
+                              "P1-CATALOG", "P1-OUTCOME", "P1-HIVE"})
         self.assertTrue(all(row["vectors"] for row in gates["requirements"]))
 
     def test_binding_and_init_preserve_identity_registry_world_and_one_seed(self):
