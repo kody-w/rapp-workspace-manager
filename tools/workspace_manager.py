@@ -1292,9 +1292,10 @@ def scan_manager(args):
     if not rapp.rappid_valid(identity["rappid"]):
         raise RoutingError("manager-rappid-invalid")
     roots = list(dict.fromkeys(str(absolute_path(root)) for root in args.root))
-    if len(roots) > 128:
+    exact = getattr(args, "mode", "recursive") == "exact"
+    if len(roots) > (MAX_ORGANIZATION_POINTERS if exact else 128):
         raise RoutingError("root-count-bound")
-    exact, budget = getattr(args, "mode", "recursive") == "exact", Budget(cli_limits(args))
+    budget = Budget(cli_limits(args))
     with manager_lock(workspace):
         registry = load_registry(workspace)
         boundaries = all_profile_boundaries(registry)

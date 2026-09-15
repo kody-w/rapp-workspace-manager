@@ -85,6 +85,16 @@ class RecursiveEstateTests(unittest.TestCase):
         self.assertEqual(identity_path.read_bytes(), identity_before)
         self.assertEqual(loaded["manager_rappid"], legacy["manager_rappid"])
 
+    def test_exact_estate_accepts_more_than_recursive_scan_root_bound(self):
+        roots = [self.folder(f"large-estate/root-{index:03d}") for index in range(129)]
+        self.select(*roots)
+        self.assertEqual(len(self.registry()["workspaces"]), 129)
+        arguments = ["scan", "--workspace", self.workspace]
+        for root in roots:
+            arguments.extend(["--root", root])
+        with self.assertRaisesRegex(RoutingError, "root-count-bound"):
+            self.command(*arguments)
+
     def test_organization_schema_rejects_unknowns_cycles_orphans_and_bad_pointers(self):
         source = self.folder("source/project")
         self.select(source)

@@ -136,6 +136,9 @@ exactly the supplied directories, in owner-supplied order. Non-Git directories
 are valid pointers. It does not discover nested repositories. Suppressed roots
 remain suppressed until `re-add`; native provider partitions are unchanged.
 Supplying the manager itself is harmless: it appears exactly once, first.
+Explicit exact selection supports up to the existing 10,000-pointer
+organization ceiling. Recursive discovery remains limited to 128 scan roots;
+large folders are scan boundaries, not one root argument per descendant.
 
 The synthetic [13-root fixture](examples/estate-13.synthetic.json) demonstrates:
 
