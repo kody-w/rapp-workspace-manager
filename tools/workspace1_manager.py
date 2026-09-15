@@ -13,8 +13,8 @@ import stat
 import sys
 import time
 
-import grail_runtime as runtime
-from grail_runtime import (
+import workspace1_runtime as runtime
+from workspace1_runtime import (
     BRAND, GUARANTEES, MANIFEST_SHA256, PROFILE, SPEC_SHA256, encode, explicit_path,
     measurement, parse, require, sha, stable_read,
 )
@@ -23,7 +23,7 @@ from routing_io import (
     safe_stat, validate_filesystem_identity,
 )
 
-STATE_SCHEMA = "rapp-workspace-manager/grail-state/1"
+STATE_SCHEMA = "rapp-workspace-manager/workspace1-state/1"
 RIGHTS = ("capture", "retention", "local_synthesis", "adoption", "materialization")
 FORMS = ("supplied-octets", "file-octets", "directory-metadata-fixture", "registry-metadata")
 MAX_JOBS = 32
@@ -78,16 +78,16 @@ def clock():
 
 
 def closed(value, keys):
-    require(type(value) is dict and set(value) == set(keys), "grail-closed-state-schema")
+    require(type(value) is dict and set(value) == set(keys), "workspace1-closed-state-schema")
 
 
 def slug(value):
-    require(type(value) is str and SLUG.fullmatch(value) is not None, "grail-invalid-local-job-id")
+    require(type(value) is str and SLUG.fullmatch(value) is not None, "workspace1-invalid-local-job-id")
     return value
 
 
 def digest(value):
-    require(type(value) is str and HASH.fullmatch(value) is not None, "grail-invalid-checksum")
+    require(type(value) is str and HASH.fullmatch(value) is not None, "workspace1-invalid-checksum")
 
 
 def address(value, *, optional=False, particle=False):
@@ -95,7 +95,7 @@ def address(value, *, optional=False, particle=False):
         return
     closed(value, {"space", "hash"})
     require(value["space"] == ("rapp/1:particle" if particle else "rapp/1:wave"),
-            "grail-address-kind")
+            "workspace1-address-kind")
     digest(value["hash"])
 
 
@@ -103,21 +103,21 @@ def subject(value):
     closed(value, {"namespace", "native_key"})
     for text in value.values():
         require(type(text) is str and 0 < len(text) <= 128 and text.isascii()
-                and all(32 <= ord(c) < 127 for c in text), "grail-invalid-explicit-subject")
+                and all(32 <= ord(c) < 127 for c in text), "workspace1-invalid-explicit-subject")
     return value
 
 
 def protocol_frontier(value):
     closed(value, PROTOCOL_FRONTIER)
     require(type(value["sequence"]) is int and 0 <= value["sequence"] <= 100000,
-            "grail-invalid-frontier")
+            "workspace1-invalid-frontier")
     for key in ("policy", "suppressions", "source_bindings"):
         address(value[key], particle=True)
     for key in ("graph_head", "adoption_head", "routing_head"):
         address(value[key], optional=True)
-    require(value["runtime_sha256"] == MANIFEST_SHA256, "grail-wrong-runtime-frontier")
+    require(value["runtime_sha256"] == MANIFEST_SHA256, "workspace1-wrong-runtime-frontier")
     for key in ("instance_rappid", "world_id"):
-        require(type(value[key]) is str and bool(value[key]), "grail-invalid-frontier")
+        require(type(value[key]) is str and bool(value[key]), "workspace1-invalid-frontier")
 
 
 def manager_frontier(value):
@@ -129,45 +129,45 @@ def manager_frontier(value):
 def validate_state(value):
     closed(value, STATE_FIELDS)
     require(value["schema"] == STATE_SCHEMA and type(value["version"]) is int
-            and value["version"] == 1 and value["spec_id"] == PROFILE, "grail-state-version")
+            and value["version"] == 1 and value["spec_id"] == PROFILE, "workspace1-state-version")
     for key in ("manager_rappid", "world_id"):
-        require(type(value[key]) is str and 0 < len(value[key]) <= 4096, "grail-state-identity")
+        require(type(value[key]) is str and 0 < len(value[key]) <= 4096, "workspace1-state-identity")
     digest(value["binding_sha256"])
     require(type(value["seed_lineage"]) is list and len(value["seed_lineage"]) == 1,
-            "grail-single-seed-lineage")
+            "workspace1-single-seed-lineage")
     address(value["seed_lineage"][0])
     address(value["adopted_projection_head"], optional=True)
     protocol_frontier(value["frontier"])
     manager_frontier(value["manager_frontier"])
-    require(type(value["jobs"]) is dict and len(value["jobs"]) <= MAX_JOBS, "grail-job-bound")
+    require(type(value["jobs"]) is dict and len(value["jobs"]) <= MAX_JOBS, "workspace1-job-bound")
     for name, job in value["jobs"].items():
         slug(name)
         closed(job, JOB_FIELDS)
-        require(job["id"] == name and job["form"] in FORMS, "grail-job-schema")
+        require(job["id"] == name and job["form"] in FORMS, "workspace1-job-schema")
         subject(job["subject"])
         address(job["source"])
         require(type(job["observations"]) is list and 1 <= len(job["observations"]) <= 2,
-                "grail-observation-bound")
+                "workspace1-observation-bound")
         for ref in job["observations"]:
             address(ref)
-        require(type(job["attempts"]) is list and len(job["attempts"]) <= 128, "grail-attempt-bound")
+        require(type(job["attempts"]) is list and len(job["attempts"]) <= 128, "workspace1-attempt-bound")
         for attempt in job["attempts"]:
             closed(attempt, {"lens", "result", "kind", "reason"})
             address(attempt["lens"], optional=True)
             address(attempt["result"])
             require(attempt["kind"] in ("candidate", "refused", "stopped")
                     and (attempt["reason"] is None or type(attempt["reason"]) is str),
-                    "grail-attempt-schema")
+                    "workspace1-attempt-schema")
         closed(job["receipts"], GUARANTEES)
         for ref in job["receipts"].values():
             address(ref)
         require(job["outcome"] in ("captured", "candidate", "refused", "stopped", "staged", "adopted")
-                and (job["reason"] is None or type(job["reason"]) is str), "grail-outcome-schema")
+                and (job["reason"] is None or type(job["reason"]) is str), "workspace1-outcome-schema")
         if job["plan"] is not None:
             closed(job["plan"], {"strategy", "field"})
             require(job["plan"]["strategy"] in ("identity", "adaptive", "strict-field")
                     and type(job["plan"]["field"]) is str
-                    and len(job["plan"]["field"]) <= 128, "grail-plan-schema")
+                    and len(job["plan"]["field"]) <= 128, "workspace1-plan-schema")
         if job["feedback"] is not None:
             closed(job["feedback"], {"refusal", "exhaust", "source"})
             for ref in job["feedback"].values():
@@ -181,57 +181,57 @@ def validate_state(value):
                     and type(migration["worlds"]) is list
                     and all(item is None or type(item) is str for item in migration["worlds"])
                     and migration["behavior_coverage"] == "registry-metadata-only"
-                    and migration["routes_changed"] is False, "grail-migration-schema")
+                    and migration["routes_changed"] is False, "workspace1-migration-schema")
         manager_frontier(job["capture_frontier"])
-    require(type(value["stages"]) is dict and len(value["stages"]) <= MAX_JOBS, "grail-stage-bound")
+    require(type(value["stages"]) is dict and len(value["stages"]) <= MAX_JOBS, "workspace1-stage-bound")
     for operation, stage in value["stages"].items():
         slug(operation)
         closed(stage, STAGE_FIELDS)
         require(type(stage["job"]) is str and stage["job"] in value["jobs"]
                 and stage["status"] in ("staged", "adopted"),
-                "grail-stage-schema")
+                "workspace1-stage-schema")
         address(stage["request"])
         address(stage["record"], optional=True)
-        require((stage["status"] == "adopted") == (stage["record"] is not None), "grail-stage-schema")
+        require((stage["status"] == "adopted") == (stage["record"] is not None), "workspace1-stage-schema")
         protocol_frontier(stage["protocol_frontier"])
         manager_frontier(stage["manager_frontier"])
         digest(stage["token"])
-        require(stage["contract"] == identity_contract(), "grail-contract-schema")
+        require(stage["contract"] == identity_contract(), "workspace1-contract-schema")
     projection = value["projections"]
     closed(projection, {"generation", "focus", "files", "authority", "native_routes"})
     require(type(projection["generation"]) is int and projection["generation"] >= 0
             and (projection["focus"] is None or
                  type(projection["focus"]) is str and projection["focus"] in value["jobs"])
             and projection["authority"] is False and projection["native_routes"] is False,
-            "grail-projection-schema")
-    require(type(projection["files"]) is list and len(projection["files"]) <= 3, "grail-projection-schema")
+            "workspace1-projection-schema")
+    require(type(projection["files"]) is list and len(projection["files"]) <= 3, "workspace1-projection-schema")
     for file in projection["files"]:
         closed(file, {"name", "sha256", "bytes"})
         require(file["name"] in ("view.json", "view.md", "estate.code-workspace")
-                and type(file["bytes"]) is int and file["bytes"] >= 0, "grail-projection-schema")
+                and type(file["bytes"]) is int and file["bytes"] >= 0, "workspace1-projection-schema")
         digest(file["sha256"])
     check = value["checkpoint"]
     closed(check, {"instance_rappid", "world_id", "frames", "frontier", "faults", "suppressions", "adoptions"})
     require(check["instance_rappid"] == value["manager_rappid"] and check["world_id"] == value["world_id"],
-            "grail-checkpoint-identity")
+            "workspace1-checkpoint-identity")
     protocol_frontier(check["frontier"])
-    require(type(check["frames"]) is list and len(check["frames"]) <= 512, "grail-checkpoint-bound")
+    require(type(check["frames"]) is list and len(check["frames"]) <= 512, "workspace1-checkpoint-bound")
     for frame in check["frames"]:
         closed(frame, {"seq", "hash"})
-        require(type(frame["seq"]) is int and 0 <= frame["seq"] < 512, "grail-checkpoint-frame")
+        require(type(frame["seq"]) is int and 0 <= frame["seq"] < 512, "workspace1-checkpoint-frame")
         digest(frame["hash"])
     for key in ("faults", "suppressions"):
-        require(type(check[key]) is list and len(check[key]) <= 512, "grail-checkpoint-bound")
+        require(type(check[key]) is list and len(check[key]) <= 512, "workspace1-checkpoint-bound")
         for item in check[key]:
             digest(item)
     require(type(check["adoptions"]) is list and len(check["adoptions"]) <= MAX_JOBS,
-            "grail-checkpoint-bound")
+            "workspace1-checkpoint-bound")
     for item in check["adoptions"]:
-        require(type(item) is list and len(item) == 4, "grail-checkpoint-adoption")
+        require(type(item) is list and len(item) == 4, "workspace1-checkpoint-adoption")
         slug(item[0])
         for item_hash in item[1:]:
             digest(item_hash)
-    require(len(encode(value)) <= MAX_STATE, "grail-state-byte-bound")
+    require(len(encode(value)) <= MAX_STATE, "workspace1-state-byte-bound")
     return value
 
 
@@ -244,7 +244,7 @@ def private_directory(path, *, create=False):
     with directory_fd(path, create=create) as fd:
         info = os.fstat(fd)
         require(info.st_uid == os.getuid() and info.st_mode & 0o077 == 0,
-                "grail-controller-directory-must-be-private")
+                "workspace1-controller-directory-must-be-private")
 
 
 def owned_file(path, *, missing=False, limit=MAX_STATE):
@@ -252,7 +252,7 @@ def owned_file(path, *, missing=False, limit=MAX_STATE):
     if info is None:
         return None
     require(stat.S_ISREG(info.st_mode) and info.st_uid == os.getuid()
-            and info.st_mode & 0o077 == 0 and info.st_nlink == 1, "grail-unsafe-owned-file")
+            and info.st_mode & 0o077 == 0 and info.st_nlink == 1, "workspace1-unsafe-owned-file")
     return stable_read(path, limit)
 
 
@@ -265,32 +265,32 @@ def identity_and_registry(workspace):
     identity = wm.manager_identity(workspace)
     registry = wm.load_registry(workspace)
     guard = stable_read(Path(workspace) / "README.md", 65536)
-    require(b"PRIVATE / NEVER PUBLISH" in guard, "grail-private-manager-guard-required")
+    require(b"PRIVATE / NEVER PUBLISH" in guard, "workspace1-private-manager-guard-required")
     require(safe_stat(Path(workspace) / "frames", missing_ok=True) is None,
-            "grail-existing-manager-root-stream-needs-qualified-transition")
+            "workspace1-existing-manager-root-stream-needs-qualified-transition")
     return identity, registry
 
 
 def binding_document(workspace):
-    private_directory(Path(workspace) / ".grail")
-    raw = owned_file(Path(workspace) / ".grail/binding.json")
+    private_directory(Path(workspace) / ".workspace1")
+    raw = owned_file(Path(workspace) / ".workspace1/binding.json")
     value = parse(raw)
     closed(value, BINDING_FIELDS)
-    require(value["schema"] == "rapp-workspace-manager/grail-binding/1"
+    require(value["schema"] == "rapp-workspace-manager/workspace1-binding/1"
             and type(value["version"]) is int and value["version"] == 1
-            and value["protocol"] == runtime.contract(), "grail-binding-version")
+            and value["protocol"] == runtime.contract(), "workspace1-binding-version")
     for key in ("checkout", "rapp1_path"):
         explicit_path(value[key])
     for key in ("checkout_identity", "rapp1_identity"):
         validate_filesystem_identity(value[key])
     digest(value["image_sha256"])
-    require(type(value["closure"]) is list and len(value["closure"]) <= 64, "grail-binding-closure")
+    require(type(value["closure"]) is list and len(value["closure"]) <= 64, "workspace1-binding-closure")
     for entry in value["closure"]:
         closed(entry, {"path", "sha256", "bytes"})
         runtime.relative_name(entry["path"])
         digest(entry["sha256"])
         require(type(entry["bytes"]) is int and 0 <= entry["bytes"] <= runtime.MAX_IMAGE,
-                "grail-binding-closure")
+                "workspace1-binding-closure")
     return value, raw
 
 
@@ -308,23 +308,23 @@ def bind(workspace, checkout, rapp1_path):
         image_raw = encode(image)
         image_runtime = runtime.Runtime(checkout, rapp1_path, files)
         try:
-            require(image_runtime.core.r.rappid_valid(identity["rappid"]), "grail-invalid-manager-rappid")
+            require(image_runtime.core.r.rappid_valid(identity["rappid"]), "workspace1-invalid-manager-rappid")
         finally:
             image_runtime.close()
         binding = {
-            "schema": "rapp-workspace-manager/grail-binding/1", "version": 1,
+            "schema": "rapp-workspace-manager/workspace1-binding/1", "version": 1,
             "protocol": runtime.contract(), "checkout": str(checkout),
             "checkout_identity": directory_identity(checkout), "rapp1_path": str(rapp1_path),
             "rapp1_identity": directory_identity(rapp1_path), "image_sha256": sha(image_raw),
             "closure": closure_records(files), "manager_rappid": identity["rappid"],
             "world_id": identity["world_id"],
         }
-        path = workspace / ".grail"
+        path = workspace / ".workspace1"
         private_directory(path, create=True)
         old = owned_file(path / "binding.json", missing=True)
-        require(old is None or old == encode(binding), "grail-existing-binding-does-not-remint-or-rebind")
+        require(old is None or old == encode(binding), "workspace1-existing-binding-does-not-remint-or-rebind")
         retained = owned_file(path / "runtime-image.json", missing=True, limit=runtime.MAX_IMAGE * 2)
-        require(retained is None or retained == image_raw, "grail-existing-runtime-image-conflict")
+        require(retained is None or retained == image_raw, "workspace1-existing-runtime-image-conflict")
         if retained is None:
             write_json(path / "runtime-image.json", image)
         if old is None:
@@ -337,47 +337,47 @@ def load_runtime(workspace, *, historical=False):
     binding, raw = binding_document(workspace)
     identity, _ = identity_and_registry(workspace)
     require(binding["manager_rappid"] == identity["rappid"] and binding["world_id"] == identity["world_id"],
-            "grail-manager-identity-or-world-changed")
-    retained = owned_file(Path(workspace) / ".grail/runtime-image.json", limit=runtime.MAX_IMAGE * 2)
-    require(sha(retained) == binding["image_sha256"], "grail-runtime-image-substitution")
+            "workspace1-manager-identity-or-world-changed")
+    retained = owned_file(Path(workspace) / ".workspace1/runtime-image.json", limit=runtime.MAX_IMAGE * 2)
+    require(sha(retained) == binding["image_sha256"], "workspace1-runtime-image-substitution")
     files = runtime.read_image(retained)
-    require(closure_records(files) == binding["closure"], "grail-runtime-closure-substitution")
+    require(closure_records(files) == binding["closure"], "workspace1-runtime-closure-substitution")
     require(directory_identity(binding["rapp1_path"]) == binding["rapp1_identity"],
-            "grail-parent-checkout-rebinding-refused")
+            "workspace1-parent-checkout-rebinding-refused")
     if not historical:
         require(directory_identity(binding["checkout"]) == binding["checkout_identity"],
-                "grail-protocol-checkout-rebinding-refused")
-        require(runtime.capture_checkout(binding["checkout"]) == files, "grail-current-runtime-drift")
+                "workspace1-protocol-checkout-rebinding-refused")
+        require(runtime.capture_checkout(binding["checkout"]) == files, "workspace1-current-runtime-drift")
     return runtime.Runtime(binding["checkout"], binding["rapp1_path"], files, historical=historical), binding, sha(raw)
 
 
 def validate_policy(value):
     closed(value, POLICY_FIELDS)
-    require(value["schema"] == "rapp-workspace-manager/grail-policy/1"
+    require(value["schema"] == "rapp-workspace-manager/workspace1-policy/1"
             and type(value["version"]) is int and value["version"] == 1
             and value["spec_id"] == PROFILE and type(value["sequence"]) is int
-            and value["sequence"] >= 1, "grail-policy-version")
+            and value["sequence"] >= 1, "workspace1-policy-version")
     require(type(value["rights"]) is list and all(type(right) is str for right in value["rights"])
             and value["rights"] == sorted(set(value["rights"]))
-            and set(value["rights"]) <= set(RIGHTS), "grail-policy-rights")
+            and set(value["rights"]) <= set(RIGHTS), "workspace1-policy-rights")
     require(type(value["scopes"]) is list and 2 <= len(value["scopes"]) <= MAX_JOBS + 2,
-            "grail-scope-bound")
+            "workspace1-scope-bound")
     subjects = set()
     for scope in value["scopes"]:
         closed(scope, {"subject", "form", "path"})
         subject(scope["subject"])
         key = encode(scope["subject"])
-        require(key not in subjects and scope["form"] in FORMS + ("seed",), "grail-ambiguous-scope")
+        require(key not in subjects and scope["form"] in FORMS + ("seed",), "workspace1-ambiguous-scope")
         subjects.add(key)
         if scope["form"] in ("file-octets", "directory-metadata-fixture"):
             explicit_path(scope["path"])
         else:
-            require(scope["path"] is None, "grail-opaque-scope-must-not-bind-a-path")
+            require(scope["path"] is None, "workspace1-opaque-scope-must-not-bind-a-path")
     for key, minimum, maximum in (
         ("max_attempts", 1, 128), ("max_depth", 0, 32), ("max_frames", 8, 512),
         ("max_total_octets", 1, 64 * 1024 * 1024),
     ):
-        require(type(value[key]) is int and minimum <= value[key] <= maximum, "grail-root-budget")
+        require(type(value[key]) is int and minimum <= value[key] <= maximum, "workspace1-root-budget")
     return value
 
 
@@ -421,20 +421,20 @@ class Host:
 
     def __init__(self, workspace, *, now=None, initializing=False):
         self.workspace = explicit_path(workspace)
-        self.path = self.workspace / ".grail"
+        self.path = self.workspace / ".workspace1"
         self.image, self.binding, self.binding_hash = load_runtime(workspace)
         self.c = None
         try:
             raw = owned_file(self.path / "policy.json")
             self.policy_doc, self.policy_hash = validate_policy(parse(raw)), sha(raw)
             require(self.policy_doc["manager_rappid"] == self.binding["manager_rappid"]
-                    and self.policy_doc["world_id"] == self.binding["world_id"], "grail-policy-identity")
+                    and self.policy_doc["world_id"] == self.binding["world_id"], "workspace1-policy-identity")
             self.policy = external_policy(self.image, self.policy_doc)
             self.fixture_clock = now
             self.now = now or clock()
             require(self.image.core.r.utc_valid(self.now)
                     and self.image.core.r.utc_valid(self.policy.expires_utc)
-                    and self.now < self.policy.expires_utc, "grail-current-policy-expired")
+                    and self.now < self.policy.expires_utc, "workspace1-current-policy-expired")
             controller_path = self.path / "controller"
             private_directory(controller_path, create=initializing)
             for name in ("controller.sqlite3", "controller.sqlite3-journal", ".controller-lock"):
@@ -442,13 +442,13 @@ class Host:
                 if info is not None:
                     require(stat.S_ISREG(info.st_mode) and info.st_nlink == 1
                             and info.st_uid == os.getuid() and info.st_mode & 0o077 == 0,
-                            "grail-unsafe-controller-store")
+                            "workspace1-unsafe-controller-store")
             for name in ("controller.sqlite3-wal", "controller.sqlite3-shm"):
                 require(safe_stat(controller_path / name, missing_ok=True) is None,
-                        "grail-unqualified-controller-journal")
+                        "workspace1-unqualified-controller-journal")
             exists = safe_stat(controller_path / "controller.sqlite3", missing_ok=True) is not None
             require(exists or (initializing and safe_stat(self.path / "state.json", missing_ok=True) is None),
-                    "grail-controller-loss-never-remints-seed")
+                    "workspace1-controller-loss-never-remints-seed")
             kernel_controller = self.image.kernel.Controller
 
             class ManagerController(kernel_controller):
@@ -481,21 +481,21 @@ class Host:
                         and self.state["world_id"] == self.policy.world_id
                         and self.state["seed_lineage"] == [self.c._get("root")]
                         and self.state["adopted_projection_head"] == self.c._get("adoption_head"),
-                        "grail-state-controller-mismatch")
+                        "workspace1-state-controller-mismatch")
                 self.c.check_checkpoint(self.state["checkpoint"])
                 recorded = {row[0]: row[1:] for row in self.c.db.execute(
                     "SELECT operation,request,candidate,record FROM adoptions")}
                 accepted = {operation: entry for operation, entry in self.state["stages"].items()
                             if entry["status"] == "adopted"}
-                require(set(recorded) == set(accepted), "grail-manager-decision-ledger-quarantine")
+                require(set(recorded) == set(accepted), "workspace1-manager-decision-ledger-quarantine")
                 for operation, entry in accepted.items():
                     job = self.state["jobs"][entry["job"]]
                     require(job["attempts"] and recorded[operation] ==
                             (entry["request"]["hash"], job["attempts"][-1]["result"]["hash"], entry["record"]["hash"]),
-                            "grail-manager-decision-ledger-quarantine")
+                            "workspace1-manager-decision-ledger-quarantine")
             else:
                 require(initializing and self.c._get("root") is None,
-                        "grail-missing-control-state-never-remints-seed")
+                        "workspace1-missing-control-state-never-remints-seed")
         except BaseException:
             self.close()
             raise
@@ -508,7 +508,7 @@ class Host:
     def scope(self, descriptor):
         subject(descriptor)
         rows = [row for row in self.policy_doc["scopes"] if row["subject"] == descriptor]
-        require(len(rows) == 1, "grail-outside-explicit-scope")
+        require(len(rows) == 1, "workspace1-outside-explicit-scope")
         return rows[0]
 
     def refresh_clock(self):
@@ -517,9 +517,9 @@ class Host:
 
     def current_frontier(self):
         require(sha(owned_file(self.path / "policy.json")) == self.policy_hash,
-                "grail-external-policy-frontier-changed")
+                "workspace1-external-policy-frontier-changed")
         require(sha(owned_file(self.path / "binding.json")) == self.binding_hash,
-                "grail-external-binding-frontier-changed")
+                "workspace1-external-binding-frontier-changed")
         return registry_frontier(self.workspace, self.policy_hash, self.binding_hash)
 
     @contextmanager
@@ -557,18 +557,18 @@ def host(workspace, *, now=None):
 
 def action_flags(**flags):
     for name, allowed in flags.items():
-        require(allowed is True, "grail-explicit-" + name.replace("_", "-") + "-required")
+        require(allowed is True, "workspace1-explicit-" + name.replace("_", "-") + "-required")
 
 
 def capture_guard(value, descriptor):
     value.refresh_clock()
     value.c.guard(descriptor, "capture")
     value.c.guard(descriptor, "retention")
-    require(value.c._get("terminal_stop") is None, "grail-durable-root-stop")
+    require(value.c._get("terminal_stop") is None, "workspace1-durable-root-stop")
     require(value.c._get("total_octets") < value.policy.max_total_octets,
-            "grail-root-byte-budget-before-access")
+            "workspace1-root-byte-budget-before-access")
     require(value.policy.max_frames - value.c.verify_history()["frames"] >= 8,
-            "grail-root-frame-budget-before-access")
+            "workspace1-root-frame-budget-before-access")
 
 
 def fixture_path(value, path, form):
@@ -577,10 +577,10 @@ def fixture_path(value, path, form):
     require(not any(part in UNSAFE_COMPONENTS or part.startswith(".env")
                     or part.endswith((".pem", ".key", ".p12", ".pfx", ".app"))
                     or part in ("id_rsa", "id_ed25519", "token", "tokens") for part in parts),
-            "grail-credential-or-native-fixture-refused-before-access")
+            "workspace1-credential-or-native-fixture-refused-before-access")
     for root in (value.workspace, Path(value.binding["checkout"]), Path(value.binding["rapp1_path"])):
         require(not path.is_relative_to(root) and not root.is_relative_to(path),
-                "grail-fixture-control-output-overlap")
+                "workspace1-fixture-control-output-overlap")
     # Registered native locations are protection metadata, never locations to probe.
     registry = manager().load_registry(value.workspace)
     candidate = directory_info(path if form == "directory-metadata-fixture" else path.parent)
@@ -590,44 +590,44 @@ def fixture_path(value, path, form):
         for root in provider["profileRoots"] + provider["requestedRoots"]:
             native = Path(root)
             require(not path.is_relative_to(native) and not native.is_relative_to(path),
-                    "grail-native-profile-fixture-refused")
+                    "workspace1-native-profile-fixture-refused")
         protected_ids.extend(provider["profileIdentities"].values())
         protected_ids.extend(row["identity"] for row in provider["profileHistory"] if row["identity"] is not None)
     require(not any(identity in candidate["ancestors"] for identity in protected_ids),
-            "grail-fixture-protected-filesystem-identity")
+            "workspace1-fixture-protected-filesystem-identity")
     return path
 
 
 def directory_fixture(path, max_entries):
-    require(type(max_entries) is int and 1 <= max_entries <= 128, "grail-directory-entry-bound")
+    require(type(max_entries) is int and 1 <= max_entries <= 128, "workspace1-directory-entry-bound")
     rows = []
     deadline = time.monotonic() + 10
     with directory_fd(path) as fd:
         before = os.fstat(fd)
         with os.scandir(fd) as entries:
             for number, entry in enumerate(entries):
-                require(time.monotonic() < deadline, "grail-directory-time-bound")
-                require(number < max_entries, "grail-directory-entry-bound")
+                require(time.monotonic() < deadline, "workspace1-directory-time-bound")
+                require(number < max_entries, "workspace1-directory-entry-bound")
                 name = entry.name
                 require(len(name.encode("utf-8")) <= 255 and not any(ord(c) < 32 for c in name),
-                        "grail-untrusted-directory-name")
+                        "workspace1-untrusted-directory-name")
                 lowered = name.casefold()
                 require(lowered not in UNSAFE_COMPONENTS and not lowered.startswith(".env")
                         and not lowered.endswith((".pem", ".key", ".p12", ".pfx")),
-                        "grail-credential-entry-refused")
+                        "workspace1-credential-entry-refused")
                 info = os.stat(name, dir_fd=fd, follow_symlinks=False)
-                require(not stat.S_ISLNK(info.st_mode), "grail-directory-link-refused")
+                require(not stat.S_ISLNK(info.st_mode), "workspace1-directory-link-refused")
                 require(stat.S_ISREG(info.st_mode) or stat.S_ISDIR(info.st_mode),
-                        "grail-directory-special-file-refused")
+                        "workspace1-directory-special-file-refused")
                 require(not stat.S_ISREG(info.st_mode) or info.st_nlink == 1,
-                        "grail-directory-hardlink-refused")
+                        "workspace1-directory-hardlink-refused")
                 rows.append({"name": name, "kind": "directory" if stat.S_ISDIR(info.st_mode) else "file",
                              "bytes": info.st_size if stat.S_ISREG(info.st_mode) else None})
         after = os.fstat(fd)
-        require(time.monotonic() < deadline, "grail-directory-time-bound")
+        require(time.monotonic() < deadline, "workspace1-directory-time-bound")
         require((before.st_dev, before.st_ino, before.st_mtime_ns, before.st_ctime_ns)
                 == (after.st_dev, after.st_ino, after.st_mtime_ns, after.st_ctime_ns),
-                "grail-directory-membership-changed")
+                "workspace1-directory-membership-changed")
     return encode({
         "form": "bounded-directory-metadata-fixture",
         "consistency": "one-level-metadata-not-coherent",
@@ -659,14 +659,14 @@ def new_job(value, name, descriptor, form, captured, *, migration=None):
 
 def job_slot(value, name):
     slug(name)
-    require(name not in value.state["jobs"], "grail-job-already-captured-use-existing-job")
-    require(len(value.state["jobs"]) < MAX_JOBS, "grail-job-bound")
+    require(name not in value.state["jobs"], "workspace1-job-already-captured-use-existing-job")
+    require(len(value.state["jobs"]) < MAX_JOBS, "workspace1-job-bound")
 
 
 def decode_supplied(encoded):
-    require(type(encoded) is str and len(encoded) <= 87384, "grail-finite-bounded-octets-required")
+    require(type(encoded) is str and len(encoded) <= 87384, "workspace1-finite-bounded-octets-required")
     raw = base64.b64decode(encoded, validate=True)
-    require(base64.b64encode(raw).decode("ascii") == encoded, "grail-noncanonical-base64")
+    require(base64.b64encode(raw).decode("ascii") == encoded, "workspace1-noncanonical-base64")
     return raw
 
 
@@ -674,32 +674,32 @@ def capture(workspace, job_id, descriptor, *, form, octets=None, path=None, max_
             octets_base64=None, allow_capture=False, allow_retention=False,
             synthetic_fixture=False, now=None):
     action_flags(capture=allow_capture, retention=allow_retention)
-    require(form in FORMS[:-1], "grail-unsupported-capture-form")
+    require(form in FORMS[:-1], "workspace1-unsupported-capture-form")
     if form != "supplied-octets":
         action_flags(synthetic_fixture=synthetic_fixture)
     with host(workspace, now=now) as value:
         job_slot(value, job_id)
         scope = value.scope(descriptor)
-        require(scope["form"] == form, "grail-capture-form-outside-approved-scope")
+        require(scope["form"] == form, "workspace1-capture-form-outside-approved-scope")
         capture_guard(value, descriptor)
         restrictions = value.c.restrictions()
         consistency = "supplied-immutable-octets"
         if form != "supplied-octets":
             require(octets is None and octets_base64 is None and str(explicit_path(path)) == scope["path"],
-                    "grail-exact-fixture-scope")
+                    "workspace1-exact-fixture-scope")
             approved = fixture_path(value, path, form)
             restrictions["rights"]["adoption"] = False
             if form == "file-octets":
-                require(stat.S_ISREG(safe_stat(approved).st_mode), "grail-finite-regular-fixture-required")
+                require(stat.S_ISREG(safe_stat(approved).st_mode), "workspace1-finite-regular-fixture-required")
                 remaining = value.policy.max_total_octets - value.c._get("total_octets")
                 octets = value.image.common.read_file(approved, min(value.image.kernel.MAX_OCTETS, remaining))
                 consistency = "stable-descriptor-not-coherent"
             else:
                 octets = directory_fixture(approved, max_entries)
         else:
-            require(path is None, "grail-octets-capture-has-no-filesystem-path")
+            require(path is None, "workspace1-octets-capture-has-no-filesystem-path")
             if octets_base64 is not None:
-                require(octets is None, "grail-ambiguous-supplied-octets")
+                require(octets is None, "workspace1-ambiguous-supplied-octets")
                 octets = decode_supplied(octets_base64)
         value.refresh_clock()
         with value.transaction():
@@ -728,7 +728,7 @@ def migrate_metadata(workspace, job_id, *, allow_capture=False, allow_retention=
             if partition["pending"] is not None or partition["status"] in ("refreshing", "stale"):
                 unresolved.append("incomplete-native-catalog-frontier")
         original = stable_read(value.workspace / "registry.json", manager().MAX_REGISTRY_BYTES)
-        require(sha(original) == frontier["registry_sha256"], "grail-registry-frontier-changed")
+        require(sha(original) == frontier["registry_sha256"], "workspace1-registry-frontier-changed")
         raw = encode({
             "form": "existing-manager-registry-metadata", "registry": registry,
             "original_registry_b64": base64.b64encode(original).decode("ascii"),
@@ -746,7 +746,7 @@ def migrate_metadata(workspace, job_id, *, allow_capture=False, allow_retention=
         with value.transaction():
             captured = value.c.capture_octets(descriptor, raw, inherited=[restrictions])
             job = new_job(value, job_id, descriptor, "registry-metadata", captured, migration=migration)
-            require(value.current_frontier() == frontier, "grail-registry-frontier-changed")
+            require(value.current_frontier() == frontier, "workspace1-registry-frontier-changed")
         value.mirror()
         return job_summary(value, job)
 
@@ -807,7 +807,7 @@ def execute_plan(value, job, strategy, field):
             "exhaust": c.body(exhausted["frame"]), "grants_authority": False,
         })
         require(value.policy.max_frames - c.verify_history()["frames"] >= 11,
-                "grail-feedback-frame-budget")
+                "workspace1-feedback-frame-budget")
         observed = c.capture_octets(descriptor, context, inherited=inherited)
     except (RoutingError, value.image.common.Refusal):
         return stop_job(value, job, "feedback-budget-or-rights-refused", lens,
@@ -827,12 +827,12 @@ def run_lenses(workspace, job_id, *, strategy="adaptive", field="workspace",
                allow_local_synthesis=False, allow_retention=False, allow_capture=False, now=None):
     action_flags(local_synthesis=allow_local_synthesis, retention=allow_retention)
     require(strategy in ("identity", "adaptive", "strict-field")
-            and type(field) is str and len(field) <= 128, "grail-closed-safe-lens-plan")
+            and type(field) is str and len(field) <= 128, "workspace1-closed-safe-lens-plan")
     if strategy == "adaptive":
         action_flags(capture=allow_capture)
     with host(workspace, now=now) as value:
         c = value.c
-        require(job_id in value.state["jobs"], "grail-unknown-job")
+        require(job_id in value.state["jobs"], "workspace1-unknown-job")
         job = value.state["jobs"][job_id]
         descriptor = job["subject"]
         value.refresh_clock()
@@ -840,7 +840,7 @@ def run_lenses(workspace, job_id, *, strategy="adaptive", field="workspace",
         c.guard(descriptor, "retention")
         plan = {"strategy": strategy, "field": field}
         if job["plan"] is not None:
-            require(job["plan"] == plan, "grail-job-plan-is-immutable")
+            require(job["plan"] == plan, "workspace1-job-plan-is-immutable")
             return job_summary(value, job)
         with value.transaction():
             job["plan"] = plan
@@ -860,17 +860,17 @@ def stage(workspace, job_id, operation_id, *, approve_identity_contract=False,
                  local_synthesis=allow_local_synthesis, retention=allow_retention)
     slug(operation_id)
     with host(workspace, now=now) as value:
-        require(job_id in value.state["jobs"], "grail-unknown-job")
+        require(job_id in value.state["jobs"], "workspace1-unknown-job")
         job, c = value.state["jobs"][job_id], value.c
         value.refresh_clock()
         c.guard(job["subject"], "local_synthesis")
         c.guard(job["subject"], "retention")
         existing = value.state["stages"].get(operation_id)
         if existing is not None:
-            require(existing["job"] == job_id, "grail-operation-idempotency-conflict")
+            require(existing["job"] == job_id, "workspace1-operation-idempotency-conflict")
             return copy.deepcopy(existing)
-        require(job["outcome"] == "candidate", "grail-no-successful-candidate-to-stage")
-        require(len(value.state["stages"]) < MAX_JOBS, "grail-stage-bound")
+        require(job["outcome"] == "candidate", "workspace1-no-successful-candidate-to-stage")
+        require(len(value.state["stages"]) < MAX_JOBS, "workspace1-stage-bound")
         candidate = job["attempts"][-1]["result"]
         contract = identity_contract()
         with value.transaction():
@@ -892,21 +892,21 @@ def stage(workspace, job_id, operation_id, *, approve_identity_contract=False,
 
 def adoption_eligibility(value, job):
     require(job["form"] not in ("file-octets", "directory-metadata-fixture"),
-            "grail-native-snapshot-adoption-disabled")
+            "workspace1-native-snapshot-adoption-disabled")
     if job["migration"] is not None:
         require(not job["migration"]["unresolved"],
-                "grail-legacy-filesystem-identity-unresolved-explicit-safe-readd-required")
+                "workspace1-legacy-filesystem-identity-unresolved-explicit-safe-readd-required")
         require(job["migration"]["registry_sha256"] == value.current_frontier()["registry_sha256"],
-                "grail-migration-registry-frontier-stale")
+                "workspace1-migration-registry-frontier-stale")
 
 
 def adopt(workspace, operation_id, expected_frontier, *, allow_adoption=False,
           allow_retention=False, now=None, fault=None):
     action_flags(adoption=allow_adoption, retention=allow_retention)
     with host(workspace, now=now) as value:
-        require(operation_id in value.state["stages"], "grail-unknown-staged-operation")
+        require(operation_id in value.state["stages"], "workspace1-unknown-staged-operation")
         stage_record, c = value.state["stages"][operation_id], value.c
-        require(expected_frontier == stage_record["token"], "grail-external-complete-frontier-token-required")
+        require(expected_frontier == stage_record["token"], "workspace1-external-complete-frontier-token-required")
         job = value.state["jobs"][stage_record["job"]]
         value.refresh_clock()
         c.guard(job["subject"], "adoption")
@@ -916,7 +916,7 @@ def adopt(workspace, operation_id, expected_frontier, *, allow_adoption=False,
             c.verify_history()
             return {"record": stage_record["record"], "idempotent": True, "authority": False}
         require(value.current_frontier() == stage_record["manager_frontier"],
-                "grail-manager-complete-frontier-CAS-refused")
+                "workspace1-manager-complete-frontier-CAS-refused")
         adoption_eligibility(value, job)
         with value.transaction():
             adopted = c.adopt(job["subject"], stage_record["request"], stage_record["protocol_frontier"])
@@ -927,12 +927,12 @@ def adopt(workspace, operation_id, expected_frontier, *, allow_adoption=False,
                 "WHERE receipts.guarantee='current_authorization' AND receipts.subject=? ORDER BY frames.seq DESC LIMIT 1",
                 (job["attempts"][-1]["result"]["hash"],),
             ).fetchone()
-            require(row is not None, "grail-adoption-authorization-receipt-missing")
+            require(row is not None, "workspace1-adoption-authorization-receipt-missing")
             job["receipts"]["current_authorization"] = {"space": "rapp/1:wave", "hash": row[0]}
             if fault:
                 fault("before-commit")
             require(value.current_frontier() == stage_record["manager_frontier"],
-                    "grail-manager-complete-frontier-CAS-refused")
+                    "workspace1-manager-complete-frontier-CAS-refused")
         if fault:
             fault("after-commit")
         value.mirror()
@@ -941,7 +941,7 @@ def adopt(workspace, operation_id, expected_frontier, *, allow_adoption=False,
 
 def initialize(workspace, scopes, *, rights, expires_utc, now=None,
                max_attempts=8, max_depth=4, max_frames=256, max_total_octets=1024 * 1024):
-    require("retention" in rights, "grail-explicit-retention-required")
+    require("retention" in rights, "workspace1-explicit-retention-required")
     workspace = explicit_path(workspace)
     with manager_lock(workspace):
         identity, _ = identity_and_registry(workspace)
@@ -950,24 +950,24 @@ def initialize(workspace, scopes, *, rights, expires_utc, now=None,
             {"subject": {"namespace": "manager-registry", "native_key": "routing"},
              "form": "registry-metadata", "path": None},
         ]
-        require(type(scopes) is list and len(scopes) <= MAX_JOBS, "grail-scope-bound")
+        require(type(scopes) is list and len(scopes) <= MAX_JOBS, "workspace1-scope-bound")
         for entry in scopes:
             closed(entry, {"subject", "form", "path"})
             subject(entry["subject"])
             require(entry["form"] in FORMS[:-1]
                     and entry["subject"].get("namespace") not in ("manager-seed", "manager-registry"),
-                    "grail-reserved-controller-scope")
+                    "workspace1-reserved-controller-scope")
         policy = validate_policy({
-            "schema": "rapp-workspace-manager/grail-policy/1", "version": 1, "spec_id": PROFILE,
+            "schema": "rapp-workspace-manager/workspace1-policy/1", "version": 1, "spec_id": PROFILE,
             "manager_rappid": identity["rappid"], "world_id": identity["world_id"],
             "sequence": 1, "expires_utc": expires_utc, "rights": sorted(rights), "scopes": reserved + scopes,
             "max_attempts": max_attempts, "max_depth": max_depth, "max_frames": max_frames,
             "max_total_octets": max_total_octets,
         })
         binding_document(workspace)
-        policy_path = workspace / ".grail/policy.json"
+        policy_path = workspace / ".workspace1/policy.json"
         old = owned_file(policy_path, missing=True)
-        require(old is None or old == encode(policy), "grail-policy-change-requires-separate-reviewed-transition")
+        require(old is None or old == encode(policy), "workspace1-policy-change-requires-separate-reviewed-transition")
         if old is None:
             write_json(policy_path, policy)
         value = Host(workspace, now=now, initializing=True)
@@ -1001,11 +1001,11 @@ def job_summary(value, job):
     for guarantee, reference in job["receipts"].items():
         payload = value.c.body(reference)
         require(payload.get("guarantee") == guarantee and payload["validator_spec"] == PROFILE
-                and payload["validator_pin"] == SPEC_SHA256, "grail-receipt-guarantee-substitution")
+                and payload["validator_pin"] == SPEC_SHA256, "workspace1-receipt-guarantee-substitution")
         row = value.c.db.execute("SELECT guarantee,subject FROM receipts WHERE hash=?",
                                  (reference["hash"],)).fetchone()
         require(row is not None and row[0] == guarantee and row[1] == payload["subject"]["hash"],
-                "grail-receipt-is-not-controller-evidence")
+                "workspace1-receipt-is-not-controller-evidence")
         guarantees[guarantee] = {
             "status": payload["status"], "scope": payload["scope"], "method": payload["method"],
             "receipt": reference, "subject": payload["subject"], "authority": False,
@@ -1044,7 +1044,7 @@ def inspect(workspace, *, job_id=None, now=None):
         for scope in value.policy_doc["scopes"]:
             value.c.guard(scope["subject"], "retention")
         if job_id is not None:
-            require(job_id in value.state["jobs"], "grail-unknown-job")
+            require(job_id in value.state["jobs"], "workspace1-unknown-job")
         jobs = [value.state["jobs"][job_id]] if job_id is not None else list(value.state["jobs"].values())
         return {
             **runtime.contract(), "schema": STATE_SCHEMA,
@@ -1056,7 +1056,7 @@ def inspect(workspace, *, job_id=None, now=None):
                             "octets_used": value.c._get("total_octets"), "max_total_octets": value.policy.max_total_octets,
                             "terminal_stop": value.c._get("terminal_stop")},
             "jobs": [job_summary(value, job) for job in jobs],
-            "projections": projection_status(value), "signed_grail_activation": False,
+            "projections": projection_status(value), "signed_activation": False,
             "assurance_receipts_are_not_authority": True,
         }
 
@@ -1067,17 +1067,17 @@ def history(workspace, *, allow_retention=False, now=None):
     with manager_lock(workspace):
         image, binding, _ = load_runtime(workspace, historical=True)
         try:
-            policy = validate_policy(parse(owned_file(workspace / ".grail/policy.json")))
+            policy = validate_policy(parse(owned_file(workspace / ".workspace1/policy.json")))
             current = now or clock()
             require(image.core.r.utc_valid(current) and image.core.r.utc_valid(policy["expires_utc"])
                     and current < policy["expires_utc"] and "retention" in policy["rights"],
-                    "grail-historical-retention-not-currently-authorized")
-            path = workspace / ".grail/controller"
+                    "workspace1-historical-retention-not-currently-authorized")
+            path = workspace / ".workspace1/controller"
             private_directory(path)
             owned_file(path / "controller.sqlite3", limit=64 * 1024 * 1024)
             for suffix in ("-journal", "-wal", "-shm"):
                 info = safe_stat(path / ("controller.sqlite3" + suffix), missing_ok=True)
-                require(info is None or info.st_size == 0, "grail-recover-controller-before-historical-read")
+                require(info is None or info.st_size == 0, "workspace1-recover-controller-before-historical-read")
             database = sqlite3.connect((path / "controller.sqlite3").as_uri() + "?mode=ro", uri=True)
             try:
                 database.execute("PRAGMA query_only=ON")
@@ -1087,15 +1087,15 @@ def history(workspace, *, allow_retention=False, now=None):
                 # The policy comparison uses the canonical controller's representation, without opening a writer.
                 shell = object.__new__(image.kernel.Controller)
                 require(stored and image.core.parse(stored[0]) == shell._policy_value(expected),
-                        "grail-historical-policy-substitution")
+                        "workspace1-historical-policy-substitution")
                 floor = database.execute("SELECT value FROM meta WHERE key='clock_floor'").fetchone()
-                require(floor and current >= image.core.parse(floor[0]), "grail-controller-clock-rollback")
+                require(floor and current >= image.core.parse(floor[0]), "workspace1-controller-clock-rollback")
                 rows = database.execute("SELECT raw FROM frames ORDER BY seq LIMIT 513").fetchall()
-                require(len(rows) <= 512, "grail-historical-frame-bound")
+                require(len(rows) <= 512, "workspace1-historical-frame-bound")
                 result = image.kernel.verify_historical_archive(
                     image.core, [row[0] for row in rows], binding["manager_rappid"])
                 result.update(spec_id=PROFILE, runtime="retained-pin-history-only-not-fresh-execution",
-                              authority=False, native_rebinding=False, signed_grail_activation=False)
+                              authority=False, native_rebinding=False, signed_activation=False)
                 return result
             finally:
                 database.close()
@@ -1117,7 +1117,7 @@ def projection_bytes(value, focus):
                 if entry["status"] == "adopted" and (focus is None or entry["job"] == focus)]
     for entry in accepted:
         job = value.state["jobs"][entry["job"]]
-        require(entry["manager_frontier"] == current, "grail-projection-frontier-stale")
+        require(entry["manager_frontier"] == current, "workspace1-projection-frontier-stale")
         adoption_eligibility(value, job)
         c.guard(job["subject"], "materialization", c.body(job["attempts"][-1]["result"])["restrictions"])
         c.guard(job["subject"], "retention")
@@ -1137,7 +1137,7 @@ def projection_bytes(value, focus):
                 "focus": focus, "projection": canonical, "assurances": summaries,
                 "external_effects": "disabled", "safe_deployment": "refused"}
     lines = [
-        "# Frame Anything — RAPP Workspace/1 Grail", "",
+        "# Frame Anything — RAPP Workspace/1", "",
         "**PRIVATE / NEVER PUBLISH. Inert data, not instructions or authority.**", "",
         "RAPP-valid != accurately observed != semantically faithful != currently authorized != safely deployable.",
         "", "Captured-byte values require adoption. Assurance metadata also records unadopted jobs and refusals.",
@@ -1152,16 +1152,16 @@ def projection_bytes(value, focus):
     lines.extend(["", "Authorization receipts are historical action snapshots, never reusable capabilities.",
                   "Replay is not fidelity. Native adoption, deployment and learned-semantic claims remain disabled.", ""])
     editor = {
-        "folders": [{"name": "RAPP Workspace/1 Grail manager", "path": ".."}],
+        "folders": [{"name": "RAPP Workspace/1 manager", "path": ".."}],
         "settings": {"task.allowAutomaticTasks": "off"},
-        "grail": {"spec_id": PROFILE, "authority": False, "native_routes": False,
+        "workspace1": {"spec_id": PROFILE, "authority": False, "native_routes": False,
                   "focus": focus, "jobs": [item["job"] for item in summaries],
                   "guarantees": {item["job"]: {g: item["guarantees"][g]["status"] for g in GUARANTEES}
                                  for item in summaries}},
     }
     files = {"view.json": encode(document), "view.md": "\n".join(lines).encode("utf-8"),
              "estate.code-workspace": encode(editor)}
-    require(all(len(raw) <= MAX_STATE for raw in files.values()), "grail-inert-projection-byte-bound")
+    require(all(len(raw) <= MAX_STATE for raw in files.values()), "workspace1-inert-projection-byte-bound")
     return files
 
 
@@ -1169,7 +1169,7 @@ def materialize(workspace, *, job_id=None, allow_materialization=False, allow_re
                 now=None, fault=None):
     action_flags(materialization=allow_materialization, retention=allow_retention)
     with host(workspace, now=now) as value:
-        require(job_id is None or job_id in value.state["jobs"], "grail-unknown-focus")
+        require(job_id is None or job_id in value.state["jobs"], "workspace1-unknown-focus")
         value.refresh_clock()
         for scope in value.policy_doc["scopes"]:
             value.c.guard(scope["subject"], "materialization")
@@ -1190,7 +1190,7 @@ def materialize(workspace, *, job_id=None, allow_materialization=False, allow_re
                 value.c.guard(scope["subject"], "materialization")
                 value.c.guard(scope["subject"], "retention")
             require(value.current_frontier() == value.state["manager_frontier"],
-                    "grail-projection-frontier-changed-before-write")
+                    "workspace1-projection-frontier-changed-before-write")
             atomic_text(value.path / name, raw.decode("utf-8"))
             if fault:
                 fault("after-" + name)
@@ -1215,18 +1215,18 @@ def recover(workspace, *, allow_retention=False, allow_materialization=False, no
 def demo(checkout, rapp1_path, output):
     output = Path(output)
     require(not output.is_absolute() and ".." not in output.parts and output != Path("."),
-            "grail-demo-requires-fresh-relative-owned-output")
+            "workspace1-demo-requires-fresh-relative-owned-output")
     path = Path.cwd() / output
-    require(not path.exists(), "grail-demo-output-exists-never-reset-a-seed")
+    require(not path.exists(), "workspace1-demo-output-exists-never-reset-a-seed")
     files = runtime.capture_checkout(checkout)
     image = runtime.Runtime(checkout, rapp1_path, files)
     try:
-        rid = image.core.r.mint_rappid("fictional", "grail-manager-demo")
+        rid = image.core.r.mint_rappid("fictional", "workspace1-manager-demo")
     finally:
         image.close()
     private_directory(path, create=True)
     identity = {"schema": "rapp/1", "rappid": rid, "kind": "workspace", "role": "manager",
-                "name": "synthetic-grail-manager", "mode": "solo", "world_id": "synthetic-fixture-world"}
+                "name": "synthetic-workspace1-manager", "mode": "solo", "world_id": "synthetic-fixture-world"}
     write_json(path / "rappid.json", identity)
     write_json(path / "registry.json", {
         "schema": manager().REGISTRY_SCHEMA, "manager_rappid": rid, "world_id": identity["world_id"],
@@ -1261,25 +1261,25 @@ def demo(checkout, rapp1_path, output):
         **runtime.contract(), "public_synthetic_only": True, "results": results,
         "rapp_frames_verified": status["root_budget"]["frames_used"],
         "root_budget": status["root_budget"], "projection_files": projections["files"],
-        "safe_deployment": "refused", "signed_grail_activation": False,
+        "safe_deployment": "refused", "signed_activation": False,
         "learning_claim": "none; deterministic bounded lenses, not learned native semantics",
     }
-    write_json(path / ".grail/demo-report.json", report)
+    write_json(path / ".workspace1/demo-report.json", report)
     return report
 
 
 def parse_subject(text):
-    require(type(text) is str and ":" in text, "grail-subject-must-be-namespace-colon-key")
+    require(type(text) is str and ":" in text, "workspace1-subject-must-be-namespace-colon-key")
     namespace, key = text.split(":", 1)
     return subject({"namespace": namespace, "native_key": key})
 
 
 def register_cli(subparsers):
     parser = subparsers.add_parser(
-        "grail", help="Frame Anything: pinned safe lenses and inert local projections",
+        "workspace1", help="Frame Anything: pinned safe lenses and inert local projections",
         description=BRAND + ": five guarantees, never one authority Boolean. "
                     "No network discovery, native grafts, model calls or deployment.")
-    commands = parser.add_subparsers(dest="grail_command", required=True)
+    commands = parser.add_subparsers(dest="workspace1_command", required=True)
 
     def command(name, help_text, flags=(), workspace=True):
         child = commands.add_parser(name, help=help_text, description=help_text)
@@ -1290,7 +1290,7 @@ def register_cli(subparsers):
         child.set_defaults(run=dispatch)
         return child
 
-    command("contract", "Print the exact expected Grail spec/manifest/parent pins; no I/O.", workspace=False)
+    command("contract", "Print the exact expected Workspace/1 spec/manifest/parent pins; no I/O.", workspace=False)
     binding = command("bind", "Bind an explicit canonical checkout by exact manifest hashes; no discovery.")
     binding.add_argument("--protocol-checkout", required=True)
     binding.add_argument("--rapp1-path", required=True)
@@ -1343,17 +1343,17 @@ def register_cli(subparsers):
                             workspace=False)
     demonstration.add_argument("--protocol-checkout", required=True)
     demonstration.add_argument("--rapp1-path", required=True)
-    demonstration.add_argument("--output", default=".validation/grail-manager-demo")
+    demonstration.add_argument("--output", default=".validation/workspace1-manager-demo")
     return parser
 
 
 def dispatch(args):
     try:
-        name = args.grail_command
+        name = args.workspace1_command
         if name == "contract":
             result = runtime.contract()
         elif name == "effect":
-            raise RoutingError("grail-unqualified-effect-disabled-before-access")
+            raise RoutingError("workspace1-unqualified-effect-disabled-before-access")
         elif name == "bind":
             result = bind(args.workspace, args.protocol_checkout, args.rapp1_path)
         elif name == "verify":

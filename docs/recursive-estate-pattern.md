@@ -1,9 +1,9 @@
 # Recursive estate organization pattern
 
-**Legacy routing workflow.** Start new Grail work with
-[Frame Anything](frame-anything.md). The Grail sidecar can observe this
+**Legacy routing workflow.** Start new Workspace/1 work with
+[Frame Anything](frame-anything.md). The Workspace/1 sidecar can observe this
 organization metadata without visiting sources, but does not authorize the
-legacy pilot/route changes below. Grail native migration/rebinding and live
+legacy pilot/route changes below. Workspace/1 native migration/rebinding and live
 effects remain disabled; its focused editor view is manager-only.
 
 Use this pattern to reduce editor-root sprawl without moving, nesting, reading

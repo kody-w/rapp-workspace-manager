@@ -16,8 +16,8 @@ import unittest
 from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).parents[1] / "tools"))
-import grail_manager as g
-import grail_runtime as runtime
+import workspace1_manager as g
+import workspace1_runtime as runtime
 import workspace_manager as wm
 from routing_io import RoutingError, directory_identity
 from support import fixture_directory, metadata_guard, snapshot, write_json
@@ -32,15 +32,15 @@ ADOPT = {"allow_adoption": True, "allow_retention": True}
 PROJECT = {"allow_materialization": True, "allow_retention": True}
 
 
-class GrailContractUnitTests(unittest.TestCase):
+class Workspace1ContractUnitTests(unittest.TestCase):
     def test_unique_protocol_id_and_exact_help(self):
         expected = runtime.contract()
-        self.assertEqual(expected["spec_id"], "rapp-workspace/grail-1.0")
-        self.assertFalse(expected["authority"])
+        self.assertEqual(expected["spec_id"], "rapp-workspace/1")
+        self.assertTrue(expected["authority"])
         self.assertEqual(expected["external_effects"], "disabled")
         parser = wm.parser()
         subcommands = next(a for a in parser._actions if isinstance(a, argparse._SubParsersAction)).choices
-        help_text = subcommands["grail"].format_help()
+        help_text = subcommands["workspace1"].format_help()
         for command in ("bind", "verify", "init", "capture", "run", "stage", "adopt",
                         "migrate", "inspect", "status", "tree", "focus", "history", "recover"):
             self.assertIn(command, help_text)
@@ -54,7 +54,7 @@ class GrailContractUnitTests(unittest.TestCase):
                           "external_deployment", "live_migration", "partitioned_effect", "public_export"):
             with self.subTest(operation=operation), mock.patch.object(g, "host", side_effect=AssertionError("access")):
                 with contextlib.redirect_stderr(io.StringIO()):
-                    self.assertEqual(g.dispatch(argparse.Namespace(grail_command="effect", operation=operation)), 1)
+                    self.assertEqual(g.dispatch(argparse.Namespace(workspace1_command="effect", operation=operation)), 1)
 
     def test_capture_flags_precede_any_host_or_source_access(self):
         for flags in ({}, {"allow_capture": True}, {"allow_retention": True}):
@@ -69,12 +69,12 @@ class GrailContractUnitTests(unittest.TestCase):
             self.assertNotIn(raw, rendered)
 
 
-class GrailManagerTests(unittest.TestCase):
+class Workspace1ManagerTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        protocol, parent = os.environ.get("GRAIL_PROTOCOL_CHECKOUT"), os.environ.get("RAPP1_PATH")
+        protocol, parent = os.environ.get("RAPP_WORKSPACE1_CHECKOUT"), os.environ.get("RAPP1_PATH")
         if not protocol or not parent:
-            raise unittest.SkipTest("explicit GRAIL_PROTOCOL_CHECKOUT and RAPP1_PATH required; no dependency discovery")
+            raise unittest.SkipTest("explicit RAPP_WORKSPACE1_CHECKOUT and RAPP1_PATH required; no dependency discovery")
         cls.protocol, cls.parent = runtime.explicit_path(protocol), runtime.explicit_path(parent)
         cls.files = runtime.capture_checkout(cls.protocol)
         cls.image = runtime.Runtime(cls.protocol, cls.parent, cls.files)
@@ -139,7 +139,7 @@ class GrailManagerTests(unittest.TestCase):
             target.write_bytes(raw)
         return path
 
-    def test_exact_contract_matches_candidate_spec_manifest_and_all_blocking_gate_ids(self):
+    def test_exact_contract_matches_core_spec_manifest_and_all_blocking_gate_ids(self):
         self.assertEqual(runtime.sha(self.files[runtime.PROTOCOL + "/SPEC.md"]), runtime.SPEC_SHA256)
         self.assertEqual(runtime.sha(self.files[runtime.PROTOCOL + "/manifest.json"]), runtime.MANIFEST_SHA256)
         gates = json.loads(self.files[runtime.PROTOCOL + "/safety-matrix.json"])
@@ -175,7 +175,7 @@ class GrailManagerTests(unittest.TestCase):
             with self.subTest(version=version), self.assertRaisesRegex(RoutingError, "version"):
                 g.validate_state({**state, "version": version})
         forged_cache = {**state, "effective_rights": ["execution"]}
-        g.write_json(self.workspace / ".grail/state.json", forged_cache)
+        g.write_json(self.workspace / ".workspace1/state.json", forged_cache)
         self.assertTrue(self.status()["assurance_receipts_are_not_authority"])
         with g.host(self.workspace, now=NOW) as value:
             with value.c.transaction():
@@ -185,7 +185,7 @@ class GrailManagerTests(unittest.TestCase):
 
     def test_missing_controller_cannot_remint_existing_seed(self):
         self.prepare()
-        (self.workspace / ".grail/controller/controller.sqlite3").unlink()
+        (self.workspace / ".workspace1/controller/controller.sqlite3").unlink()
         with self.assertRaisesRegex(RoutingError, "never-remints"):
             g.initialize(self.workspace, self.scopes, rights=self.rights, expires_utc=EXPIRY, now=NOW)
 
@@ -195,7 +195,7 @@ class GrailManagerTests(unittest.TestCase):
         (frames / "0.json").write_bytes(b"existing manager-owned stream; do not reinterpret")
         with metadata_guard([frames], []), self.assertRaisesRegex(RoutingError, "root-stream-needs-qualified"):
             self.prepare()
-        self.assertFalse((self.workspace / ".grail/controller").exists())
+        self.assertFalse((self.workspace / ".workspace1/controller").exists())
 
     def test_lost_manager_decision_metadata_is_quarantined_not_rebuilt_as_authority(self):
         self.prepare()
@@ -228,7 +228,7 @@ class GrailManagerTests(unittest.TestCase):
         with self.assertRaisesRegex(RoutingError, "pin-mismatch"):
             runtime.Runtime(self.protocol, self.parent, altered)
         self.prepare()
-        image_path = self.workspace / ".grail/runtime-image.json"
+        image_path = self.workspace / ".workspace1/runtime-image.json"
         image_path.write_bytes(image_path.read_bytes() + b" ")
         with self.assertRaisesRegex(RoutingError, "image-substitution"):
             self.capture()
@@ -261,7 +261,7 @@ class GrailManagerTests(unittest.TestCase):
         with self.assertRaisesRegex(RoutingError, "closed"):
             g.initialize(self.workspace, [{"subject": "not-an-object", "form": "supplied-octets", "path": None}],
                          rights=self.rights, expires_utc=EXPIRY, now=NOW)
-        policy = json.loads((self.workspace / ".grail/policy.json").read_bytes())
+        policy = json.loads((self.workspace / ".workspace1/policy.json").read_bytes())
         policy["rights"] = [{"execute": True}]
         with self.assertRaisesRegex(RoutingError, "policy-rights"):
             g.validate_policy(policy)
@@ -469,7 +469,7 @@ class GrailManagerTests(unittest.TestCase):
                     g.adopt(self.workspace, "accept-input", prepared["token"], now=NOW, **ADOPT)
         self.registry = original
         self.save_registry()
-        policy_file = self.workspace / ".grail/policy.json"
+        policy_file = self.workspace / ".workspace1/policy.json"
         policy = json.loads(policy_file.read_bytes())
         policy["rights"].remove("adoption")
         g.write_json(policy_file, policy)
@@ -510,7 +510,7 @@ class GrailManagerTests(unittest.TestCase):
         self.assertEqual(first, second)
         self.assertTrue(first["idempotent"])
         g.recover(self.workspace, allow_retention=True, now=NOW)
-        self.assertEqual(json.loads((self.workspace / ".grail/state.json").read_bytes()), self.read_state())
+        self.assertEqual(json.loads((self.workspace / ".workspace1/state.json").read_bytes()), self.read_state())
 
     def test_process_death_before_commit_does_not_leave_partial_manager_or_protocol_adoption(self):
         self.prepare()
@@ -519,7 +519,7 @@ class GrailManagerTests(unittest.TestCase):
         script = """
 import os, sys
 sys.path.insert(0, sys.argv[1])
-import grail_manager as g
+import workspace1_manager as g
 g.adopt(sys.argv[2], 'accept-input', sys.argv[3], allow_adoption=True, allow_retention=True,
         now=sys.argv[4], fault=lambda phase: os._exit(93) if phase == 'before-commit' else None)
 """
@@ -617,8 +617,8 @@ g.adopt(sys.argv[2], 'accept-input', sys.argv[3], allow_adoption=True, allow_ret
         with metadata_guard([self.fixtures], []):
             g.materialize(self.workspace, now=NOW, **PROJECT)
         self.assertEqual(before, (self.workspace / "registry.json").read_bytes())
-        editor = json.loads((self.workspace / ".grail/estate.code-workspace").read_bytes())
-        self.assertEqual(editor["folders"], [{"name": "RAPP Workspace/1 Grail manager", "path": ".."}])
+        editor = json.loads((self.workspace / ".workspace1/estate.code-workspace").read_bytes())
+        self.assertEqual(editor["folders"], [{"name": "RAPP Workspace/1 manager", "path": ".."}])
 
     def test_migration_stale_capture_frontier_cannot_be_repaired_by_a_fresh_stage(self):
         self.prepare()
@@ -636,20 +636,20 @@ g.adopt(sys.argv[2], 'accept-input', sys.argv[3], allow_adoption=True, allow_ret
         prepared = self.ready(raw=raw)
         g.adopt(self.workspace, "accept-input", prepared["token"], now=NOW, **ADOPT)
         first = g.materialize(self.workspace, now=NOW, **PROJECT)
-        files = {name: (self.workspace / ".grail" / name).read_bytes()
+        files = {name: (self.workspace / ".workspace1" / name).read_bytes()
                  for name in ("view.json", "view.md", "estate.code-workspace")}
         second = g.materialize(self.workspace, now=NOW, **PROJECT)
         self.assertEqual(first, second)
-        self.assertEqual(files, {name: (self.workspace / ".grail" / name).read_bytes() for name in files})
+        self.assertEqual(files, {name: (self.workspace / ".workspace1" / name).read_bytes() for name in files})
         for content in files.values():
             for dangerous in (b"<img", b"<script>", b"\x1b", b"https://", b"!["):
                 self.assertNotIn(dangerous, content)
         for name in ("SKILL.md", "CLAUDE.md", "AGENTS.md", "tasks.json", "settings.json"):
-            self.assertFalse((self.workspace / ".grail" / name).exists())
+            self.assertFalse((self.workspace / ".workspace1" / name).exists())
         self.assertFalse(json.loads(files["view.json"])["authority"])
         self.assertEqual(len(json.loads(files["estate.code-workspace"])["folders"]), 1)
         for name in files:
-            self.assertEqual((self.workspace / ".grail" / name).stat().st_mode & 0o111, 0)
+            self.assertEqual((self.workspace / ".workspace1" / name).stat().st_mode & 0o111, 0)
 
     def test_projection_crash_recovery_and_suppression_staleness_never_make_views_authority(self):
         self.prepare()
@@ -673,7 +673,7 @@ g.adopt(sys.argv[2], 'accept-input', sys.argv[3], allow_adoption=True, allow_ret
         self.prepare()
         self.candidate(b"not a supported mapping", strategy="strict-field")
         g.materialize(self.workspace, job_id="input", now=NOW, **PROJECT)
-        document = json.loads((self.workspace / ".grail/view.json").read_bytes())
+        document = json.loads((self.workspace / ".workspace1/view.json").read_bytes())
         self.assertEqual(document["projection"]["entries"], [])
         self.assertFalse(document["authority"])
         self.assertEqual(document["assurances"][0]["guarantees"]["semantic_fidelity"]["status"], "refused")
@@ -692,7 +692,7 @@ g.adopt(sys.argv[2], 'accept-input', sys.argv[3], allow_adoption=True, allow_ret
         with self.assertRaisesRegex(RoutingError, "projection-frontier-stale"):
             g.materialize(self.workspace, now=NOW, **PROJECT)
         g.materialize(self.workspace, job_id="fresh", now=NOW, **PROJECT)
-        document = json.loads((self.workspace / ".grail/view.json").read_bytes())
+        document = json.loads((self.workspace / ".workspace1/view.json").read_bytes())
         self.assertEqual([p["operation"] for p in document["projection"]["entries"]], ["accept-fresh"])
         self.assertTrue(self.status()["projections"]["manager_frontier_current"])
         self.assertEqual(seed, self.read_state()["seed_lineage"])
@@ -704,13 +704,13 @@ g.adopt(sys.argv[2], 'accept-input', sys.argv[3], allow_adoption=True, allow_ret
         self.assertEqual(result["guarantees"]["current_authorization"]["status"], "refused")
         with self.assertRaisesRegex(ValueError, "capability-denied:materialization"):
             g.materialize(self.workspace, now=NOW, **PROJECT)
-        self.assertFalse((self.workspace / ".grail/view.json").exists())
+        self.assertFalse((self.workspace / ".workspace1/view.json").exists())
 
     def test_manager_owned_outputs_refuse_symlink_escape(self):
         self.prepare()
         prepared = self.ready()
         g.adopt(self.workspace, "accept-input", prepared["token"], now=NOW, **ADOPT)
-        (self.workspace / ".grail/view.json").symlink_to(self.source)
+        (self.workspace / ".workspace1/view.json").symlink_to(self.source)
         original = self.source.read_bytes()
         with self.assertRaisesRegex(RoutingError, "symlink"):
             g.materialize(self.workspace, now=NOW, **PROJECT)
@@ -781,7 +781,7 @@ g.adopt(sys.argv[2], 'accept-input', sys.argv[3], allow_adoption=True, allow_ret
         encoded = json.dumps(report)
         for value in (str(self.root), str(Path.home()), str(self.protocol), str(self.parent)):
             self.assertNotIn(value, encoded)
-        self.assertFalse(report["signed_grail_activation"])
+        self.assertFalse(report["signed_activation"])
 
 
 if __name__ == "__main__":

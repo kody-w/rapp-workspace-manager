@@ -1,39 +1,40 @@
 ---
 name: autonomous-rapp-estate-manager
-description: "Frame Anything through RAPP Workspace/1 Grail: bind explicit exact-byte public protocol tools, preserve one existing manager seed, capture only authorized finite fixtures or existing registry metadata, retain safe lens refusals/exhaust, and stage inert projections for external transactional adoption. Keep five assurances separate; never infer native migration, learned semantics, permission or deployment."
-compatibility: "Python 3.11+, explicit pinned public Grail/RAPP1 checkouts, supported POSIX no-follow I/O, private manager ownership and local locking. No model service, arbitrary code, home discovery, native graft or companion skill installation."
+description: "Frame Anything through RAPP Workspace/1: bind explicit exact-byte public protocol tools, preserve one existing manager seed, capture only authorized finite fixtures or existing registry metadata, retain safe lens refusals/exhaust, and stage inert projections for external transactional adoption. Keep five assurances separate; never infer native migration, learned semantics, permission or deployment."
+compatibility: "Python 3.11+, explicit pinned public Workspace/1/RAPP1 checkouts, supported POSIX no-follow I/O, private manager ownership and local locking. No model service, arbitrary code, home discovery, native graft or companion skill installation."
 ---
 
-# Frame Anything — RAPP Workspace/1 Grail
+# Frame Anything — RAPP Workspace/1
 
 Start with the safe local seed/control-plane and deterministic inert projection
 host, not a scan of the owner's estate. Use explicitly supplied, exact-byte
 pinned public checkouts. Never discover them by home search or network
-fallback. This is a candidate integration, not signed activation.
+fallback. This is the core protocol integration; signed estate activation is
+separate.
 
 **RAPP-valid != accurately observed != semantically faithful != currently
 authorized != safely deployable.**
 
 ## 0. Default workflow: Frame Anything, with honest refusals
 
-The only current Grail protocol ID is **`rapp-workspace/grail-1.0`**.
-Historical experimental `rapp-workspace/1.0`/`1.1` identifiers retain their
-meaning and MUST NOT be reused. RAPP/1 still owns identity, canonicalization,
-the eleven-key frame, hashes, signatures, Eggs and its signed registry.
+The only current Workspace/1 protocol ID is **`rapp-workspace/1`**.
+All earlier workspace protocol lines are prototype history and MUST NOT be
+reused as current authority. RAPP/1 still owns identity, canonicalization, the
+eleven-key frame, hashes, signatures, Eggs and its signed registry.
 The manager registry remains `rapp-workspace-manager/1`, routing only.
 
 ### Preflight and public rehearsal
 
-Read the manager's current `grail --help`, `grail contract`, `SPEC.md` and the
-explicit candidate's public spec/manifest/schema/runtime/safety matrix.
+Read the manager's current `workspace1 --help`, `workspace1 contract`, `SPEC.md`
+and the explicit core checkout's public spec/manifest/schema/runtime/safety matrix.
 Require the exact expected hashes, not a convenient older validator.
 Use this one-command **public synthetic** rehearsal before any private work:
 
 ```bash
-python3 -B "<MANAGER_CODE>/tools/workspace_manager.py" grail demo \
-  --protocol-checkout "<EXPLICIT_GRAIL_CANDIDATE_CHECKOUT>" \
+python3 -B "<MANAGER_CODE>/tools/workspace_manager.py" workspace1 demo \
+  --protocol-checkout "<EXPLICIT_RAPP_WORKSPACE1_CHECKOUT>" \
   --rapp1-path "<EXPLICIT_PINNED_RAPP1_CHECKOUT>" \
-  --output .validation/grail-manager-demo
+  --output .validation/workspace1-manager-demo
 ```
 
 The output directory must be fresh. Nested-array and binary fixtures show A
@@ -50,13 +51,13 @@ Require private no-follow controller ownership and one writer. The explicit
 paths below are not inferred or traversed outside their approved scope:
 
 ```bash
-python3 -B "<MANAGER_CODE>/tools/workspace_manager.py" grail bind \
+python3 -B "<MANAGER_CODE>/tools/workspace_manager.py" workspace1 bind \
   --workspace "<EXISTING_PRIVATE_MANAGER>" \
-  --protocol-checkout "<EXPLICIT_GRAIL_CANDIDATE_CHECKOUT>" \
+  --protocol-checkout "<EXPLICIT_RAPP_WORKSPACE1_CHECKOUT>" \
   --rapp1-path "<EXPLICIT_PINNED_RAPP1_CHECKOUT>"
-python3 -B "<MANAGER_CODE>/tools/workspace_manager.py" grail verify \
+python3 -B "<MANAGER_CODE>/tools/workspace_manager.py" workspace1 verify \
   --workspace "<EXISTING_PRIVATE_MANAGER>"
-python3 -B "<MANAGER_CODE>/tools/workspace_manager.py" grail init \
+python3 -B "<MANAGER_CODE>/tools/workspace_manager.py" workspace1 init \
   --workspace "<EXISTING_PRIVATE_MANAGER>" \
   --scopes-file "<EXPLICIT_HOST_SELECTED_SCOPES_JSON>" \
   --expires-utc "<OWNER_APPROVED_UTC_EXPIRY>" \
@@ -72,7 +73,7 @@ captured/learned data. Capture, retention, synthesis, adoption and
 materialization are separate rights. Their flags do not grant hosted model
 submission, public redistribution, code execution or native access.
 
-`.grail/` is a closed control sidecar with exact public runtime image/pins,
+`.workspace1/` is a closed control sidecar with exact public runtime image/pins,
 one seed lineage, root counters, frame/receipt/job references and externally
 staged decisions. It is not an identity, task or competing routing store.
 Its state cache and projections never provide authority. Exact initialization
@@ -84,11 +85,11 @@ Do not discover or graft externally located root streams.
 ### Observe a declared finite fixture, not a native estate
 
 ```bash
-python3 -B "<MANAGER_CODE>/tools/workspace_manager.py" grail capture \
+python3 -B "<MANAGER_CODE>/tools/workspace_manager.py" workspace1 capture \
   --workspace "<EXISTING_PRIVATE_MANAGER>" --job document \
   --subject synthetic:document --form supplied-octets \
   --octets-base64 WzEsWzIsM11d --allow-capture --allow-retention
-python3 -B "<MANAGER_CODE>/tools/workspace_manager.py" grail run \
+python3 -B "<MANAGER_CODE>/tools/workspace_manager.py" workspace1 run \
   --workspace "<EXISTING_PRIVATE_MANAGER>" --job document \
   --strategy adaptive --field workspace \
   --allow-local-synthesis --allow-retention --allow-capture
@@ -113,17 +114,17 @@ successful byte mapping proves full native behavior or learned capability.
 ### External complete-frontier adoption; inert views only
 
 ```bash
-python3 -B "<MANAGER_CODE>/tools/workspace_manager.py" grail stage \
+python3 -B "<MANAGER_CODE>/tools/workspace_manager.py" workspace1 stage \
   --workspace "<EXISTING_PRIVATE_MANAGER>" --job document \
   --operation-id accept-document --approve-identity-contract \
   --allow-local-synthesis --allow-retention
-python3 -B "<MANAGER_CODE>/tools/workspace_manager.py" grail adopt \
+python3 -B "<MANAGER_CODE>/tools/workspace_manager.py" workspace1 adopt \
   --workspace "<EXISTING_PRIVATE_MANAGER>" --operation-id accept-document \
   --expected-frontier "<EXACT_EXTERNALLY_CHECKED_STAGE_TOKEN>" \
   --allow-adoption --allow-retention
-python3 -B "<MANAGER_CODE>/tools/workspace_manager.py" grail project \
+python3 -B "<MANAGER_CODE>/tools/workspace_manager.py" workspace1 project \
   --workspace "<EXISTING_PRIVATE_MANAGER>" --allow-materialization --allow-retention
-python3 -B "<MANAGER_CODE>/tools/workspace_manager.py" grail inspect \
+python3 -B "<MANAGER_CODE>/tools/workspace_manager.py" workspace1 inspect \
   --workspace "<EXISTING_PRIVATE_MANAGER>" --job document
 ```
 
@@ -136,21 +137,21 @@ manager state and checkpoint share one SQLite COMMIT, with crash recovery and
 exact idempotent retries. A changed operation or stale frontier refuses.
 Candidates, lenses, receipts and graph-shaped adoption claims cannot self-adopt.
 
-`grail status|inspect|tree` report the seed/jobs and five separate assurance
-states; `grail focus --job ... --allow-materialization --allow-retention`
+`workspace1 status|inspect|tree` report the seed/jobs and five separate assurance
+states; `workspace1 focus --job ... --allow-materialization --allow-retention`
 filters one job's assurance metadata, including refusals; captured byte values
 still require adoption. A fresh focused job can exclude stale historical
 adoptions without resetting the seed. Outputs are fixed manager-owned JSON, escaped
 Markdown and a **manager-only** editor view. No source routes, active images/
 links, HTML, instructions, hooks, extensions or executable files are created.
-`grail recover --allow-retention` repairs only the state mirror; adding
+`workspace1 recover --allow-retention` repairs only the state mirror; adding
 `--allow-materialization` permits current-authorized view regeneration.
-`grail history --allow-retention` can verify historical parent frames without
+`workspace1 history --allow-retention` can verify historical parent frames without
 the old evaluator; it never renews other guarantees or permits fresh execution.
 
 ### Metadata migration and blocked rollout
 
-`grail migrate --workspace "<EXISTING_PRIVATE_MANAGER>" --job registry-observation
+`workspace1 migrate --workspace "<EXISTING_PRIVATE_MANAGER>" --job registry-observation
 --metadata-only --allow-capture --allow-retention` captures metadata **already
 in the registry only**, preserving RAPPID, worlds, order and suppression.
 Do not stat routed paths, touch profiles, silently upgrade v1 pointers or
@@ -159,10 +160,10 @@ and non-adoptable until an independently authorized explicit safe re-add and
 a new observation. A complete V2 metadata view still is not live migration.
 
 Require the targeted/full manager tests, compile, existing nonzero-frame
-conformance and exact cross-repo candidate conformance from
-`tools/check_grail_conformance.py`. Both dependencies are explicit; skipped
+conformance and exact cross-repo core conformance from
+`tools/check_workspace1_conformance.py`. Both dependencies are explicit; skipped
 integration tests are not acceptance. The cross-repo checker uses an exact
-public owned mirror and leaves the candidate checkout unchanged.
+public owned mirror and leaves the core checkout unchanged.
 
 Private shadow work needs separate owner authorization for manager/backup/
 shadow/tooling roots, metadata retention/expiry, single-writer interval and
@@ -177,10 +178,10 @@ export, timed erasure and fabricated learning claims remain explicit refusals.
 Retained hashes/lineage are sensitive GODD; deleting a view does not erase history.
 
 **Sections 1–9 below document separately authorized legacy pointer-routing
-operations, not the Grail default workflow or permission to bypass its
+operations, not the Workspace/1 default workflow or permission to bypass its
 refusals.** Native inspection/opening, legacy pilot rollout and optional Egg
-procedures must not be invoked as consequences of Grail framing or adoption.
-For a Grail-only task, completion means the bounded public/local workflow is
+procedures must not be invoked as consequences of Workspace/1 framing or adoption.
+For a Workspace/1-only task, completion means the bounded public/local workflow is
 verified and unsupported private/live work is explicitly blocked—not a full
 estate migration.
 

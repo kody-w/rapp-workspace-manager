@@ -1,4 +1,4 @@
-"""Exact public Grail dependency images; no discovery, plugins, or import-path fallback."""
+"""Exact public Workspace/1 dependency images; no discovery, plugins, or import-path fallback."""
 
 import base64
 import builtins
@@ -15,11 +15,11 @@ from routing_io import (
     reject_constant,
 )
 
-PROFILE = "rapp-workspace/grail-1.0"
-BRAND = "RAPP Workspace/1 Grail"
-PROTOCOL = "protocols/rapp-workspace/grail-1.0"
-SPEC_SHA256 = "3da45fabcfedb94c67a032ebb12fc02716b44b32822933d43c998825c632935f"
-MANIFEST_SHA256 = "fa4bee666cc56c1db43d9f5f452358f8d623e85deb31b8fcb32b58553cebbdae"
+PROFILE = "rapp-workspace/1"
+BRAND = "RAPP Workspace/1"
+PROTOCOL = "protocols/rapp-workspace/1"
+SPEC_SHA256 = "a0ede31854b9bf3b0abf72f73e9b973a05c9f2ff02f57b8846955d9d1951c59a"
+MANIFEST_SHA256 = "a2d4434bfcead8e5fe44504a5d4759b96eb15104b4789b96a0b23b9e0b71162a"
 PARENT_COMMIT = "dda32d741c7218f41443a5bd17eebfe0eae82cb7"
 GUARANTEES = (
     "rapp_integrity", "observation", "semantic_fidelity",
@@ -57,25 +57,25 @@ def parse(raw):
     try:
         return json.loads(raw, object_pairs_hook=unique_object, parse_constant=reject_constant)
     except (ValueError, UnicodeError, RecursionError):
-        raise RoutingError("grail-invalid-json") from None
+        raise RoutingError("workspace1-invalid-json") from None
 
 
 def explicit_path(value):
-    require(isinstance(value, (str, os.PathLike)), "grail-explicit-absolute-path-required")
+    require(isinstance(value, (str, os.PathLike)), "workspace1-explicit-absolute-path-required")
     value = os.fspath(value)
     require(isinstance(value, str) and 0 < len(value) <= 4096
-            and not any(ord(c) < 32 for c in value), "grail-invalid-path")
+            and not any(ord(c) < 32 for c in value), "workspace1-invalid-path")
     path = Path(value)
     require(path.is_absolute() and ".." not in path.parts and len(path.parts) <= 128
-            and not value.startswith("//"), "grail-explicit-absolute-path-required")
+            and not value.startswith("//"), "workspace1-explicit-absolute-path-required")
     return path
 
 
 def relative_name(value):
-    require(type(value) is str and 0 < len(value) <= 256, "grail-closure-path")
+    require(type(value) is str and 0 < len(value) <= 256, "workspace1-closure-path")
     path = Path(value)
     require(not path.is_absolute() and ".." not in path.parts
-            and str(path) == value, "grail-closure-path")
+            and str(path) == value, "workspace1-closure-path")
     return value
 
 
@@ -83,18 +83,19 @@ def stable_read(path, limit=MAX_IMAGE):
     """Verify the named object as well as the descriptor used by the manager reader."""
     with directory_fd(Path(path).parent) as fd:
         before = os.stat(Path(path).name, dir_fd=fd, follow_symlinks=False)
-        require(stat.S_ISREG(before.st_mode) and before.st_nlink == 1, "grail-unsafe-file")
+        require(stat.S_ISREG(before.st_mode) and before.st_nlink == 1, "workspace1-unsafe-file")
         raw = read_bytes(path, max_bytes=limit)
         after = os.stat(Path(path).name, dir_fd=fd, follow_symlinks=False)
         fields = lambda s: (s.st_dev, s.st_ino, s.st_mode, s.st_nlink, s.st_size,
                             s.st_mtime_ns, s.st_ctime_ns)
-        require(fields(before) == fields(after), "grail-named-file-changed")
+        require(fields(before) == fields(after), "workspace1-named-file-changed")
         return raw
 
 
 def manifest_entries(manifest):
     require(manifest.get("profile") == PROFILE and manifest.get("parent") == "rapp/1"
-            and manifest.get("authority") is False, "grail-wrong-protocol")
+            and manifest.get("authority") is True and manifest.get("status") == "core",
+            "workspace1-wrong-protocol")
     result = {}
     for section in ("normative", "reference"):
         for row in manifest[section]:
@@ -103,32 +104,32 @@ def manifest_entries(manifest):
         result[relative_name(row["path"])] = row
     row = manifest["provenance"]
     result[PROTOCOL + "/" + relative_name(row["path"])] = row
-    row = manifest["historical_catalog"]
+    row = manifest["prototype_catalog"]
     result[relative_name(row["path"])] = row
     return result
 
 
 def verify_image(files):
-    require(type(files) is dict and len(files) <= 64, "grail-closure-bound")
+    require(type(files) is dict and len(files) <= 64, "workspace1-closure-bound")
     raw = files.get(PROTOCOL + "/manifest.json")
-    require(type(raw) is bytes and sha(raw) == MANIFEST_SHA256, "grail-manifest-pin-mismatch")
+    require(type(raw) is bytes and sha(raw) == MANIFEST_SHA256, "workspace1-manifest-pin-mismatch")
     manifest = parse(raw)
     entries = manifest_entries(manifest)
     require(set(files) == set(entries) | {PROTOCOL + "/manifest.json", "protocols/index.json"},
-            "grail-executable-closure-mismatch")
-    require(sum(len(raw) for raw in files.values()) <= MAX_IMAGE, "grail-closure-bound")
+            "workspace1-executable-closure-mismatch")
+    require(sum(len(raw) for raw in files.values()) <= MAX_IMAGE, "workspace1-closure-bound")
     for name, entry in entries.items():
         value = files[name]
         require(type(value) is bytes and len(value) == entry["bytes"]
-                and sha(value) == entry["sha256"], "grail-closure-pin-mismatch")
-    require(sha(files[PROTOCOL + "/SPEC.md"]) == SPEC_SHA256, "grail-spec-pin-mismatch")
+                and sha(value) == entry["sha256"], "workspace1-closure-pin-mismatch")
+    require(sha(files[PROTOCOL + "/SPEC.md"]) == SPEC_SHA256, "workspace1-spec-pin-mismatch")
     index = parse(files["protocols/index.json"])
     selected = [p for p in index["profiles"] if p["name"].startswith("rapp-workspace/")]
     require(index.get("workspace_latest") == PROFILE and len(selected) == 1
             and selected[0]["name"] == PROFILE
             and selected[0]["spec_sha256"] == SPEC_SHA256
             and selected[0]["manifest_sha256"] == MANIFEST_SHA256,
-            "grail-index-pin-mismatch")
+            "workspace1-index-pin-mismatch")
     return manifest
 
 
@@ -136,7 +137,7 @@ def capture_checkout(checkout):
     checkout = explicit_path(checkout)
     identity = directory_identity(checkout)
     raw = stable_read(checkout / PROTOCOL / "manifest.json")
-    require(sha(raw) == MANIFEST_SHA256, "grail-manifest-pin-mismatch")
+    require(sha(raw) == MANIFEST_SHA256, "workspace1-manifest-pin-mismatch")
     files = {PROTOCOL + "/manifest.json": raw}
     for name in manifest_entries(parse(raw)):
         files[name] = stable_read(checkout / name)
@@ -148,33 +149,33 @@ def capture_checkout(checkout):
             names = set()
             with os.scandir(fd) as rows:
                 for number, row in enumerate(rows):
-                    require(number < 64, "grail-closure-bound")
+                    require(number < 64, "workspace1-closure-bound")
                     if row.name.endswith(suffix):
-                        require(row.is_file(follow_symlinks=False), "grail-unsafe-runtime-file")
+                        require(row.is_file(follow_symlinks=False), "workspace1-unsafe-runtime-file")
                         names.add(row.name)
-            require(names == expected, "grail-executable-closure-mismatch")
+            require(names == expected, "workspace1-executable-closure-mismatch")
     verify_image(files)
-    require(identity == directory_identity(checkout), "grail-checkout-identity-changed")
+    require(identity == directory_identity(checkout), "workspace1-checkout-identity-changed")
     return files
 
 
 def image_json(files):
     verify_image(files)
-    return {"schema": "rapp-workspace-manager/grail-image/1", "spec_id": PROFILE,
+    return {"schema": "rapp-workspace-manager/workspace1-image/1", "spec_id": PROFILE,
             "files": {name: base64.b64encode(raw).decode("ascii") for name, raw in sorted(files.items())}}
 
 
 def read_image(raw):
     data = parse(raw)
     require(type(data) is dict and set(data) == {"schema", "spec_id", "files"}
-            and data["schema"] == "rapp-workspace-manager/grail-image/1"
+            and data["schema"] == "rapp-workspace-manager/workspace1-image/1"
             and data["spec_id"] == PROFILE and type(data["files"]) is dict,
-            "grail-image-schema")
+            "workspace1-image-schema")
     try:
         files = {relative_name(name): base64.b64decode(value, validate=True)
                  for name, value in data["files"].items()}
     except (TypeError, ValueError):
-        raise RoutingError("grail-image-encoding") from None
+        raise RoutingError("workspace1-image-encoding") from None
     verify_image(files)
     return files
 
@@ -186,15 +187,15 @@ class Runtime:
         self.checkout, self.rapp1_path = explicit_path(checkout), explicit_path(rapp1_path)
         self.files, self.manifest = files, verify_image(files)
         self.modules = {}
-        package = "_manager_grail_" + MANIFEST_SHA256[:12] + "_" + str(id(self))
+        package = "_manager_workspace1_" + MANIFEST_SHA256[:12] + "_" + str(id(self))
         trusted_import = builtins.__import__
 
         def importer(name, globals=None, locals=None, fromlist=(), level=0):
-            require(level == 0, "grail-relative-import-disabled")
+            require(level == 0, "workspace1-relative-import-disabled")
             if name in MODULES:
-                require(name in self.modules, "grail-runtime-import-order")
+                require(name in self.modules, "workspace1-runtime-import-order")
                 return self.modules[name]
-            require(name in STDLIB, "grail-ambient-import-disabled")
+            require(name in STDLIB, "workspace1-ambient-import-disabled")
             return trusted_import(name, globals, locals, fromlist, level)
 
         try:
@@ -216,9 +217,9 @@ class Runtime:
                     name = str(path.relative_to(self.checkout))
                     if name in self.files:
                         value = self.files[name]
-                        require(len(value) <= limit, "grail-validator-byte-bound")
+                        require(len(value) <= limit, "workspace1-validator-byte-bound")
                         return value
-                    require(path.is_relative_to(self.rapp1_path), "grail-unpinned-validator-input")
+                    require(path.is_relative_to(self.rapp1_path), "workspace1-unpinned-validator-input")
                 return live_read(path, limit)
 
             parent_schema = self.common.SchemaSet
@@ -236,10 +237,10 @@ class Runtime:
             index = parse(files["protocols/index.json"])
             selected = [p for p in index["profiles"] if p["name"].startswith("rapp-workspace/")]
             require(selected == [self.modules["pins"].index_profile()]
-                    and index.get("authority") is False and index.get("workspace_brand") == BRAND,
-                    "grail-exact-index-profile-mismatch")
+                    and index.get("authority") is True and index.get("workspace_brand") == BRAND,
+                    "workspace1-exact-index-profile-mismatch")
             self.core = self.common.Parent(self.rapp1_path)
-            require(self.core.pin["commit"] == PARENT_COMMIT, "grail-parent-pin-mismatch")
+            require(self.core.pin["commit"] == PARENT_COMMIT, "workspace1-parent-pin-mismatch")
             if not historical:
                 self.common.read_file = live_read
         except BaseException:
@@ -254,4 +255,4 @@ class Runtime:
 def contract():
     return {"spec_id": PROFILE, "brand": BRAND, "spec_sha256": SPEC_SHA256,
             "manifest_sha256": MANIFEST_SHA256, "parent_commit": PARENT_COMMIT,
-            "authority": False, "external_effects": "disabled"}
+            "authority": True, "external_effects": "disabled"}
