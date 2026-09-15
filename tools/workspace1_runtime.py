@@ -18,8 +18,8 @@ from routing_io import (
 PROFILE = "rapp-workspace/1"
 BRAND = "RAPP Workspace/1"
 PROTOCOL = "protocols/rapp-workspace/1"
-SPEC_SHA256 = "ab0d681a0eb103648e306608c01a1e6fd2b3f62092c6d1c25cf80c01e514a638"
-MANIFEST_SHA256 = "ba42ee9a4732bae27e52048141b0e872934266b0ca151d1b300bc71e7ea824e8"
+SPEC_SHA256 = "77e7bae0726090e4c40ecb88f56557e6335256d3e32faa3cbb0ebf308d07905c"
+MANIFEST_SHA256 = "82520ed5c94cb7449fad6c80966d83c67302f058f3d5e2808fa49a459656560f"
 PARENT_COMMIT = "dda32d741c7218f41443a5bd17eebfe0eae82cb7"
 GUARANTEES = (
     "rapp_integrity", "observation", "semantic_fidelity",
