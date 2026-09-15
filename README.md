@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/kody-w/rapp-workspace-manager/actions/workflows/ci.yml/badge.svg)](https://github.com/kody-w/rapp-workspace-manager/actions/workflows/ci.yml)
 
-## Frame Anything — RAPP Workspace/1 Grail
+## Frame Anything — RAPP Workspace/1
 
 **RAPP-valid != accurately observed != semantically faithful != currently
 authorized != safely deployable.**
@@ -13,9 +13,10 @@ An external local controller—not a candidate, lens, receipt, or projection—m
 approve adoption against the complete current frontier. Deployment and unproven
 learned semantics stay **disabled**.
 
-The unique protocol ID is **`rapp-workspace/grail-1.0`**. Historical experimental
-`1.0`/`1.1` identifiers are not reused. RAPP/1's eleven-key envelope is unchanged.
-This is an integration of the public **candidate**, not signed Grail activation.
+The core protocol ID is **`rapp-workspace/1`**. All earlier workspace lines are
+prototype history. RAPP/1's eleven-key envelope is unchanged. This manager
+integrates the public core protocol; estate activation remains a separate
+owner-signed operation.
 
 ### One-command public synthetic demo
 
@@ -23,8 +24,8 @@ Supply the two explicit public checkouts; no home search, network discovery,
 native profile, credential, or routed source is used:
 
 ```bash
-python3 -B tools/workspace_manager.py grail demo \
-  --protocol-checkout "<EXPLICIT_GRAIL_CANDIDATE_CHECKOUT>" \
+python3 -B tools/workspace_manager.py workspace1 demo \
+  --protocol-checkout "<EXPLICIT_RAPP_WORKSPACE1_CHECKOUT>" \
   --rapp1-path "<EXPLICIT_PINNED_RAPP1_CHECKOUT>"
 ```
 
@@ -36,20 +37,20 @@ adopted view has **safe deployment refused**. This is deterministic bounded
 mapping, not evidence of learned native semantics.
 
 The default output is the fresh manager-owned
-`.validation/grail-manager-demo`; an existing seed is never reset. The report
+`.validation/workspace1-manager-demo`; an existing seed is never reset. The report
 contains no real input paths. JSON, escaped Markdown, and a manager-only editor
 view are inert; no source is added as an editor root.
 
 ### Existing manager: bind, preserve the seed, observe, stage
 
 ```bash
-python3 -B tools/workspace_manager.py grail --help
-python3 -B tools/workspace_manager.py grail contract
-python3 -B tools/workspace_manager.py grail bind \
+python3 -B tools/workspace_manager.py workspace1 --help
+python3 -B tools/workspace_manager.py workspace1 contract
+python3 -B tools/workspace_manager.py workspace1 bind \
   --workspace "<EXISTING_PRIVATE_MANAGER>" \
-  --protocol-checkout "<EXPLICIT_GRAIL_CANDIDATE_CHECKOUT>" \
+  --protocol-checkout "<EXPLICIT_RAPP_WORKSPACE1_CHECKOUT>" \
   --rapp1-path "<EXPLICIT_PINNED_RAPP1_CHECKOUT>"
-python3 -B tools/workspace_manager.py grail verify \
+python3 -B tools/workspace_manager.py workspace1 verify \
   --workspace "<EXISTING_PRIVATE_MANAGER>"
 ```
 
@@ -58,18 +59,18 @@ Capture and retention are separate explicit flags; synthesis, adoption, and
 materialization need their own grants too. The manager RAPPID, routing world,
 registry schema, owner order, and suppressions are preserved.
 
-- `.grail/` is a **closed manager-owned control sidecar**, not a replacement
+- `.workspace1/` is a **closed manager-owned control sidecar**, not a replacement
   identity, task store, routing registry, or protocol.
 - Jobs are bounded references to canonical observations, lenses, attempts,
   refusals, exhaust, five receipts, and externally staged decisions.
 - File fixtures are stable-descriptor observations, **not coherent native
   snapshots**. Bounded directory fixtures contain one-level metadata only.
   Both remain non-adoptable, including their fallback derivatives.
-- `grail migrate --metadata-only` reads the existing manager registry only.
+- `workspace1 migrate --metadata-only` reads the existing manager registry only.
   It never visits routed paths. V1 pointers without filesystem identity stay
   unresolved until an explicit safe re-add and a new metadata observation.
-- `grail inspect|status|tree|focus` expose scoped assurances without turning
-  them into authority. `grail recover` repairs disposable mirrors/projections
+- `workspace1 inspect|status|tree|focus` expose scoped assurances without turning
+  them into authority. `workspace1 recover` repairs disposable mirrors/projections
   from the controller's atomic ledger, never from a learned adoption claim.
 
 Public redistribution, native grafts/rebinding, live behavior-preserving
@@ -101,7 +102,7 @@ pointer-only boundary.
 
 ## Requirements and privacy
 
-Python 3.10+ for legacy routing (3.11+ for Grail), no third-party Python packages, and a local canonical
+Python 3.10+ for legacy routing (3.11+ for Workspace/1), no third-party Python packages, and a local canonical
 [`rapp-1`](https://github.com/kody-w/rapp-1) checkout for initialization and RAPP
 identity validation. Safe filesystem operations currently require POSIX
 descriptor-relative no-follow I/O and locking (macOS/Linux). Unsupported

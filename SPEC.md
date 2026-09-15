@@ -2,12 +2,12 @@
 
 `spec_id: rapp-workspace-manager/1`
 
-An application of `rapp/1` identity/frames. The legacy routing profile retains
-its `rapp-workspace/1.1` manager behavior. The additive Frame Anything host
-implements **RAPP Workspace/1 Grail**, uniquely `rapp-workspace/grail-1.0`,
-under sections 11–13. It MUST NOT reuse the historical experimental 1.0/1.1
-identifiers. The registry remains routing-only, not a new protocol, identity,
-task store or unified native AI storage model.
+An application of `rapp/1` identity/frames. Prototype-era routing registries
+remain readable for migration compatibility, but they are not current protocol
+authority. The additive Frame Anything host implements the core
+**RAPP Workspace/1** protocol, uniquely `rapp-workspace/1`, under sections
+11–13. The registry remains routing-only, not a new protocol, identity, task
+store or unified native AI storage model.
 
 ## 1. Authority and privacy
 
@@ -467,36 +467,36 @@ only. Actual profile roots, selected rosters, provider IDs, generated registries
 dashboards, identities and editor views stay private. No push/merge/publication
 or live native-store mutation is part of local manager operations.
 
-## 11. Frame Anything: closed Grail control sidecar
+## 11. Frame Anything: closed Workspace/1 control sidecar
 
 **RAPP-valid != accurately observed != semantically faithful != currently
 authorized != safely deployable.**
 
-Grail is a safe local seed/control-plane and deterministic projection host.
-The expected candidate spec/manifest pins and exact parent commit are defined
-in `tools/grail_runtime.py` and printed by `grail contract`. The canonical
-protocol is `rapp-workspace/grail-1.0`, branding **RAPP Workspace/1 Grail**.
-The `rapp/1` eleven-key frame envelope remains unchanged. All Grail records
+Workspace/1 is a safe local seed/control-plane and deterministic projection host.
+The expected core spec/manifest pins and exact parent commit are defined
+in `tools/workspace1_runtime.py` and printed by `workspace1 contract`. The canonical
+protocol is `rapp-workspace/1`, branding **RAPP Workspace/1**.
+The `rapp/1` eleven-key frame envelope remains unchanged. All Workspace/1 records
 MUST be built/verified by the explicitly supplied pinned canonical parent,
 using the canonical reference payload schemas and `body.pulse` stream.
 
 The existing registry schema, manager RAPPID, routing world, pointer identities,
 suppression, organization and owner order MUST NOT change merely by binding,
-initializing, observing, running a lens, staging, adopting or projecting Grail
-data. Existing legacy commands remain backward compatible. Grail MUST NOT
+initializing, observing, running a lens, staging, adopting or projecting Workspace/1
+data. Existing legacy commands remain backward compatible. Workspace/1 MUST NOT
 invoke native discovery, providers or routed-source adapters.
 An existing manager-root `frames` location MUST refuse unqualified root-stream
 reuse rather than starting another sequence-zero chain. Separate legacy
 project streams remain untouched; externally located root streams require an
 independent owner checkpoint/qualification, not discovery or automatic grafting.
 
-The manager-owned private `.grail/` directory contains:
+The manager-owned private `.workspace1/` directory contains:
 
 | File | Role |
 |---|---|
-| `binding.json` | Closed `rapp-workspace-manager/grail-binding/1`: version, exact protocol contract, explicit checkout/parent locators and filesystem identities, public image checksum and complete file closure, existing manager RAPPID/world. Immutable binding, not source authority. |
-| `runtime-image.json` | Closed `rapp-workspace-manager/grail-image/1`: exact verified public bytes, encoded as data. No importable modules, instructions or plugins are generated. |
-| `policy.json` | Closed `rapp-workspace-manager/grail-policy/1`: independent external-host rights/scopes, sequence, expiry and root budgets, bound to the existing manager identity/world and checked against canonical controller policy. |
+| `binding.json` | Closed `rapp-workspace-manager/workspace1-binding/1`: version, exact protocol contract, explicit checkout/parent locators and filesystem identities, public image checksum and complete file closure, existing manager RAPPID/world. Immutable binding, not source authority. |
+| `runtime-image.json` | Closed `rapp-workspace-manager/workspace1-image/1`: exact verified public bytes, encoded as data. No importable modules, instructions or plugins are generated. |
+| `policy.json` | Closed `rapp-workspace-manager/workspace1-policy/1`: independent external-host rights/scopes, sequence, expiry and root budgets, bound to the existing manager identity/world and checked against canonical controller policy. |
 | `controller/controller.sqlite3` | Canonical local controller ledger/frames/receipts/heads/suppression/faults. One closed `manager_state` metadata value joins its transaction domain; it is not a replacement routing or task store. |
 | `state.json` | Disposable mirror of `manager_state`. It MUST NOT be loaded as effective grants or an adoption fallback. |
 | `view.json`, `view.md`, `estate.code-workspace` | Fixed, deterministic, inert manager projections. No source/native folders are added. |
@@ -509,7 +509,7 @@ seed_lineage adopted_projection_head frontier manager_frontier
 jobs stages projections checkpoint
 ```
 
-`schema` is `rapp-workspace-manager/grail-state/1`, `version` is integer 1.
+`schema` is `rapp-workspace-manager/workspace1-state/1`, `version` is integer 1.
 `seed_lineage` contains exactly one canonical seed wave, reused on restart.
 No identity is minted for an existing manager. Missing/corrupt authoritative
 state, unknown keys/types/versions or mismatched identity/world MUST refuse.
@@ -550,7 +550,7 @@ retains its canonical complete frame/frontier/fault/suppression/adoption proof.
 
 ## 12. Closed observation, lens, rights and adoption boundary
 
-`grail bind` MUST accept only explicit absolute protocol/parent checkouts,
+`workspace1 bind` MUST accept only explicit absolute protocol/parent checkouts,
 verify exact expected manifest/spec/index/closure/parent bytes and filesystem
 identities, and use no network discovery, home search or historical fallback.
 Current and historical validator IDs MUST NOT be conflated. Captured public
@@ -603,11 +603,11 @@ learning native semantics. Feedback refusal/exhaust MUST remain retained even
 if B's context exceeds budget. Strict-field refusal is a valid stable outcome.
 Repeated job runs reuse the same plan/result; root stops are durable.
 
-`grail stage` requires independent host approval of the exact complete
+`workspace1 stage` requires independent host approval of the exact complete
 captured-byte identity/inverse contract. Partial JSON-field coverage MUST NOT
 be upgraded to full fidelity. Staging emits request data only.
 
-`grail adopt` requires a separate external action grant and the exact stage
+`workspace1 adopt` requires a separate external action grant and the exact stage
 token. The existing manager lock and canonical controller lock enforce one
 local writer. Canonical adoption/authorization receipts, decision ledger,
 heads, manager state and checkpoint MUST commit together in one SQLite
@@ -631,7 +631,7 @@ not implemented. Independent monotonic checkpoints remain a hosting gate.
 
 ## 13. Inert projections, metadata migration and limits
 
-Grail materializes captured byte values only from accepted views with current
+Workspace/1 materializes captured byte values only from accepted views with current
 separate retention/materialization rights and inherited restrictions.
 Assurance metadata may additionally show unadopted jobs and safe refusals,
 including in a focused view; this MUST NOT adopt their byte values. Its JSON
@@ -643,8 +643,8 @@ No untrusted strings are interpolated into commands or executable files.
 HTML, remote images/links, instruction files and executable permissions MUST
 NOT be generated from captures or projections.
 
-Only `.grail/view.json`, `.grail/view.md` and
-`.grail/estate.code-workspace` are Grail projection destinations. There is no
+Only `.workspace1/view.json`, `.workspace1/view.md` and
+`.workspace1/estate.code-workspace` are Workspace/1 projection destinations. There is no
 arbitrary output-path option or external/public export. Existing routing
 registry/editor files and settings remain unchanged. Committed checksums/focus
 precede individually atomic projection writes. After a crash, inspect exposes
@@ -654,13 +654,13 @@ A fresh explicitly focused job may exclude stale historical adoptions without
 resetting the seed. The default all-job view MUST refuse any included stale adoption.
 Without materialization permission recovery only repairs the state mirror.
 
-`grail history` verifies nonzero RAPP/1 frames using retained pinned public
+`workspace1 history` verifies nonzero RAPP/1 frames using retained pinned public
 validator data even if the current evaluator is unavailable. Current retention
 rights and monotonic time remain required. Other guarantees are historical or
 unavailable, not freshly authorized. RAPP integrity alone is never deployment
 or permission.
 
-`grail migrate --metadata-only` MUST preserve original registry bytes,
+`workspace1 migrate --metadata-only` MUST preserve original registry bytes,
 RAPPID/worlds, pointer/native identity, owner order, organization and complete
 suppression metadata. It MUST NOT stat, read, index, upgrade or rebind routed
 paths. V1 pointers lacking filesystem identity, missing selected-native
