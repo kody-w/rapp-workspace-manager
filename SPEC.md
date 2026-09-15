@@ -2,9 +2,12 @@
 
 `spec_id: rapp-workspace-manager/1`
 
-An application of `rapp/1` identity/frames and the manager rule in
-`rapp-workspace/1.1`. This extension adds routing pointers, not a new protocol
-or a unified native AI storage model.
+An application of `rapp/1` identity/frames. The legacy routing profile retains
+its `rapp-workspace/1.1` manager behavior. The additive Frame Anything host
+implements **RAPP Workspace/1 Grail**, uniquely `rapp-workspace/grail-1.0`,
+under sections 11–13. It MUST NOT reuse the historical experimental 1.0/1.1
+identifiers. The registry remains routing-only, not a new protocol, identity,
+task store or unified native AI storage model.
 
 ## 1. Authority and privacy
 
@@ -463,3 +466,225 @@ This public repository contains reusable tools, synthetic fixtures and tests
 only. Actual profile roots, selected rosters, provider IDs, generated registries,
 dashboards, identities and editor views stay private. No push/merge/publication
 or live native-store mutation is part of local manager operations.
+
+## 11. Frame Anything: closed Grail control sidecar
+
+**RAPP-valid != accurately observed != semantically faithful != currently
+authorized != safely deployable.**
+
+Grail is a safe local seed/control-plane and deterministic projection host.
+The expected candidate spec/manifest pins and exact parent commit are defined
+in `tools/grail_runtime.py` and printed by `grail contract`. The canonical
+protocol is `rapp-workspace/grail-1.0`, branding **RAPP Workspace/1 Grail**.
+The `rapp/1` eleven-key frame envelope remains unchanged. All Grail records
+MUST be built/verified by the explicitly supplied pinned canonical parent,
+using the canonical reference payload schemas and `body.pulse` stream.
+
+The existing registry schema, manager RAPPID, routing world, pointer identities,
+suppression, organization and owner order MUST NOT change merely by binding,
+initializing, observing, running a lens, staging, adopting or projecting Grail
+data. Existing legacy commands remain backward compatible. Grail MUST NOT
+invoke native discovery, providers or routed-source adapters.
+An existing manager-root `frames` location MUST refuse unqualified root-stream
+reuse rather than starting another sequence-zero chain. Separate legacy
+project streams remain untouched; externally located root streams require an
+independent owner checkpoint/qualification, not discovery or automatic grafting.
+
+The manager-owned private `.grail/` directory contains:
+
+| File | Role |
+|---|---|
+| `binding.json` | Closed `rapp-workspace-manager/grail-binding/1`: version, exact protocol contract, explicit checkout/parent locators and filesystem identities, public image checksum and complete file closure, existing manager RAPPID/world. Immutable binding, not source authority. |
+| `runtime-image.json` | Closed `rapp-workspace-manager/grail-image/1`: exact verified public bytes, encoded as data. No importable modules, instructions or plugins are generated. |
+| `policy.json` | Closed `rapp-workspace-manager/grail-policy/1`: independent external-host rights/scopes, sequence, expiry and root budgets, bound to the existing manager identity/world and checked against canonical controller policy. |
+| `controller/controller.sqlite3` | Canonical local controller ledger/frames/receipts/heads/suppression/faults. One closed `manager_state` metadata value joins its transaction domain; it is not a replacement routing or task store. |
+| `state.json` | Disposable mirror of `manager_state`. It MUST NOT be loaded as effective grants or an adoption fallback. |
+| `view.json`, `view.md`, `estate.code-workspace` | Fixed, deterministic, inert manager projections. No source/native folders are added. |
+
+`manager_state` has exactly:
+
+```text
+schema version spec_id manager_rappid world_id binding_sha256
+seed_lineage adopted_projection_head frontier manager_frontier
+jobs stages projections checkpoint
+```
+
+`schema` is `rapp-workspace-manager/grail-state/1`, `version` is integer 1.
+`seed_lineage` contains exactly one canonical seed wave, reused on restart.
+No identity is minted for an existing manager. Missing/corrupt authoritative
+state, unknown keys/types/versions or mismatched identity/world MUST refuse.
+There is no automatic state reinitialization or recovery from graph-shaped
+adoption/authority claims.
+
+The `frontier` is the complete canonical controller frontier: instance/world,
+policy, graph/adoption/routing heads, suppression, source bindings, runtime
+commitment and sequence. `manager_frontier` contains exactly SHA-256
+measurements of registry bytes, identity bytes, routing metadata, suppressions,
+organization, worlds, external policy bytes and binding bytes. These are
+manager CAS/file checksums, not new RAPP identities or hash domains.
+
+Each bounded job has exactly:
+
+```text
+id subject form source observations attempts receipts outcome reason
+plan feedback migration capture_frontier
+```
+
+These are references to framing work, not a copied task backlog. Observations,
+lenses, attempts, refusals and exhaust remain canonical frames. Each attempt
+has `lens,result,kind,reason`; a pre-lens root stop has null `lens`. `receipts`
+has exactly the five named guarantees. Receipts bind canonical subject,
+instance/world, exact validator/runtime pins, scope/method/evidence and
+restrictions. A recorded verified state MUST NOT become a capability.
+`feedback`, when present, has `refusal,exhaust,source` wave references.
+Plans are closed `identity|adaptive|strict-field` selections and an exact
+field, never executable programs. A job's plan cannot be silently changed.
+
+Migration metadata is exactly `registry_sha256,unresolved,worlds,
+behavior_coverage,routes_changed`, with `registry-metadata-only` coverage and
+`routes_changed:false`. Each stage has exactly `job,request,protocol_frontier,
+manager_frontier,token,contract,status,record`. Projection metadata is exactly
+`generation,focus,files,authority,native_routes`; both authority/native routes
+are false. Files have only name/checksum/byte count. The controller checkpoint
+retains its canonical complete frame/frontier/fault/suppression/adoption proof.
+
+## 12. Closed observation, lens, rights and adoption boundary
+
+`grail bind` MUST accept only explicit absolute protocol/parent checkouts,
+verify exact expected manifest/spec/index/closure/parent bytes and filesystem
+identities, and use no network discovery, home search or historical fallback.
+Current and historical validator IDs MUST NOT be conflated. Captured public
+code, schemas and parent provenance MUST be the same bytes consumed by the
+loader/validator; candidate evaluators get no ambient imports, environment,
+network, credentials, callbacks or host tools. Every fresh execution MUST
+requalify the entire current pinned runtime closure. Retained public history
+bytes do not qualify fresh execution.
+
+External rights for capture, retention, local synthesis, adoption and
+materialization MUST remain independent and outside learned/received graphs.
+Each effectful CLI action also requires its corresponding explicit flags.
+The live CLI supplies trusted current UTC and enforces the durable clock
+floor/expiry, never taking current time from fixture data. An immutable
+existing policy cannot be widened, rebound or used to reset budgets by rerunning
+`init`; policy transitions not implemented by this host MUST refuse.
+
+Capture forms are:
+
+1. `supplied-octets`: finite explicitly supplied immutable bytes, no source path.
+2. `file-octets`: an exact approved synthetic regular-file fixture read through
+   canonical bounded no-follow stable-descriptor I/O, never claiming coherence.
+3. `directory-metadata-fixture`: an explicitly approved synthetic one-level
+   enumeration of names/types/file sizes only. No child contents/descendants
+   are read. Its immutable assembled buffer states `one-level-metadata-not-coherent`.
+4. `registry-metadata`: only existing manager-registry bytes/normalized metadata,
+   with no routed-source access.
+
+Authorization, retention and remaining source-access budgets MUST be checked
+before fixture stat/enumeration/open/decode. Filesystem fixtures additionally
+require `--synthetic-fixture`; they are not native adapters. Scope/path/form
+substitution, links, hardlinks, credentials/native names, special files,
+registered native protection identities or controller/tooling overlap refuse.
+Scope attestation MUST NOT be misrepresented as a universal secret detector.
+File/directory fixtures and their descendants inherit adoption denial; a
+fallback MUST NOT launder them into supplied-octet/native adoption.
+
+Opaque invalid bytes may be observed but strict JSON interpretation MUST
+refuse invalid UTF-8, duplicates, huge/out-of-domain numbers, unsupported
+structures and undeclared reads. The canonical total evaluator supports
+bounded `identity-octets` and exact `json-field` only. Actual, necessary,
+synthesis, enumeration, negative and environment reads retain their distinct
+meaning. Replay equality is not fidelity.
+
+`adaptive` runs lens A, retains its refusal and repeated-state exhaust, and
+captures a finite context containing the original bytes plus the exact
+refusal/exhaust. B consumes that context through the canonical identity lens,
+intersecting all restrictions and using the same root budget. This is not
+learning native semantics. Feedback refusal/exhaust MUST remain retained even
+if B's context exceeds budget. Strict-field refusal is a valid stable outcome.
+Repeated job runs reuse the same plan/result; root stops are durable.
+
+`grail stage` requires independent host approval of the exact complete
+captured-byte identity/inverse contract. Partial JSON-field coverage MUST NOT
+be upgraded to full fidelity. Staging emits request data only.
+
+`grail adopt` requires a separate external action grant and the exact stage
+token. The existing manager lock and canonical controller lock enforce one
+local writer. Canonical adoption/authorization receipts, decision ledger,
+heads, manager state and checkpoint MUST commit together in one SQLite
+transaction; nested canonical operations use savepoints. COMMIT is the
+linearization point. The complete canonical and manager frontiers MUST match,
+including suppression, source occurrence, world, policy, runtime and exact
+registry bytes. A final manager CAS precedes COMMIT. Crash-before-commit
+rolls back all decision state; lost acknowledgements return the exact existing
+record. Changed operation content refuses. An acknowledgement is historical
+evidence, not renewed authority for materialization or future action.
+Manager accepted-stage records MUST exactly match canonical controller
+operation/request/candidate/record tuples. Missing or inconsistent manager
+decision metadata MUST quarantine instead of becoming a cache/graph recovery
+path for effective authority.
+
+Native-subject suppression survives new content and occurrence waves.
+Verified owned-store forks latch refusal across restart. Local unsigned
+faults MUST NOT be called signed owner equivocation. Distributed/controller
+merge, partitioned effects and self-authenticated whole-store rollback are
+not implemented. Independent monotonic checkpoints remain a hosting gate.
+
+## 13. Inert projections, metadata migration and limits
+
+Grail materializes captured byte values only from accepted views with current
+separate retention/materialization rights and inherited restrictions.
+Assurance metadata may additionally show unadopted jobs and safe refusals,
+including in a focused view; this MUST NOT adopt their byte values. Its JSON
+is data only; raw source text stays encoded. Markdown contains fixed explanatory text
+and escaped assurance metadata, never source instructions or active links.
+The editor view contains the manager once using the fixed relative `..` root,
+no native/source routes, tasks, hooks, plugins or extension recommendations.
+No untrusted strings are interpolated into commands or executable files.
+HTML, remote images/links, instruction files and executable permissions MUST
+NOT be generated from captures or projections.
+
+Only `.grail/view.json`, `.grail/view.md` and
+`.grail/estate.code-workspace` are Grail projection destinations. There is no
+arbitrary output-path option or external/public export. Existing routing
+registry/editor files and settings remain unchanged. Committed checksums/focus
+precede individually atomic projection writes. After a crash, inspect exposes
+staleness; authorized `recover` regenerates from controller state, never from
+the cache. Changed manager/suppression frontiers refuse stale materialization.
+A fresh explicitly focused job may exclude stale historical adoptions without
+resetting the seed. The default all-job view MUST refuse any included stale adoption.
+Without materialization permission recovery only repairs the state mirror.
+
+`grail history` verifies nonzero RAPP/1 frames using retained pinned public
+validator data even if the current evaluator is unavailable. Current retention
+rights and monotonic time remain required. Other guarantees are historical or
+unavailable, not freshly authorized. RAPP integrity alone is never deployment
+or permission.
+
+`grail migrate --metadata-only` MUST preserve original registry bytes,
+RAPPID/worlds, pointer/native identity, owner order, organization and complete
+suppression metadata. It MUST NOT stat, read, index, upgrade or rebind routed
+paths. V1 pointers lacking filesystem identity, missing selected-native
+references and incomplete partitions remain unresolved and cannot be adopted.
+Only an independently approved explicit safe re-add may verify a local root;
+a new observation is then required. Old observations are never rewritten.
+Even complete V2 metadata can produce only an inert metadata view, not a
+behavior-preserving or coherent native migration. A fresh stage cannot repair
+a stale captured registry frontier.
+
+Bounds: 32 scopes/jobs (plus reserved seed/registry scopes), 32 stages, 64 KiB
+per capture, one-level directory maximum 128 entries and ten-second cooperative
+deadline, 1 MiB manager state and each projection, and the canonical root
+budget defaults/ceilings (8/128 attempts, 4/32 depth, 256/512 frames,
+1 MiB/64 MiB aggregate capture). The public closure is bounded to 64 files/
+4 MiB. No partial migration or zero-artifact conformance may be called complete.
+
+Hosted model calls, arbitrary code/imports, automatic native grafts/rebinding,
+live native migration, coherent database snapshots, partitioned/external
+effects, public export, unqualified runtimes, timed physical erasure and
+fabricated learned-semantic claims MUST remain explicit refusals.
+
+The exact CLI/scope schema, public one-command demo, integration/unchanged
+canonical P0/P1 tests, read-only-input cross-repo conformance and private
+shadow/live-pilot blockers are documented in `docs/frame-anything.md`.
+Public tests/COMPLIANT integrity do not constitute signed activation or
+authorization to start a private shadow or live native pilot.
